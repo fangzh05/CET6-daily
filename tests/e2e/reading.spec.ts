@@ -1,5 +1,15 @@
 import {test,expect} from '@playwright/test';
 test.beforeEach(async({request})=>{await request.get('http://127.0.0.1:8787/__test/reset');});
+test('pending library opens full context on desktop and mobile without grading',async({page})=>{
+  await page.goto('/');await page.getByRole('button',{name:'题库',exact:true}).click();
+  const row=page.locator('article').filter({has:page.getByRole('heading',{name:'待核验测试文章 · 非六级真题'})});
+  await row.getByRole('button',{name:'查看文章与题目'}).click();
+  await expect(page.getByText('待核验 · 暂不评分',{exact:true})).toBeVisible();await expect(page.locator('.preview-article')).toBeVisible();
+  if((page.viewportSize()?.width??1000)<768)await page.getByRole('button',{name:'题目',exact:true}).click();
+  await expect(page.locator('.preview-questions')).toBeVisible();await expect(page.locator('.preview-questions article')).toHaveCount(5);
+  await expect(page.getByRole('button',{name:'开始正式练习'})).toHaveCount(0);await expect(page.getByRole('button',{name:'提交整组'})).toHaveCount(0);
+  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+});
 test('complete reading, refresh recovery, evidence, and immutable first score',async({page})=>{
   const isMobile=(page.viewportSize()?.width??1000)<=700;
   const errors:string[]=[];page.on('pageerror',e=>errors.push(e.message));

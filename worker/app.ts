@@ -34,6 +34,8 @@ export function createApp(deps: Dependencies = {}) {
     await next();
   });
   app.get('/api/me', c => c.json(c.get('user')));
+  app.get('/api/library', async c => c.json(await c.get('repo').library()));
+  app.get('/api/library/:id', async c => c.json(await c.get('repo').preview(c.req.param('id'))));
   app.get('/api/dashboard', async c => c.json(await c.get('repo').dashboard(c.get('user').id)));
   app.get('/api/questions/daily', async c => c.json(await c.get('repo').daily(c.get('user').id)));
   app.get('/api/groups/:id', async c => c.json(await c.get('repo').group(c.req.param('id'))));

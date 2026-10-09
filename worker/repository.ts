@@ -22,6 +22,19 @@ export class Repository {
     if (!row) throw new ApiError(404, 'GROUP_NOT_AVAILABLE');
     return row.data;
   }
+  async library() {
+    return this.db.query(sql`select g.id,g.title,g.kind,p.year,p.month,p.set,g.eligible,
+      (select count(*)::int from questions q where q.group_id=g.id and not q.archived) question_count
+      from question_groups g join papers p on p.id=g.paper_id where not g.archived
+      order by p.year desc,p.month desc,p.set,g.id`);
+  }
+  async preview(gid: string) {
+    const [row]=await this.db.query(sql`select cet6_group(id) data,eligible from question_groups where id=${gid} and not archived`);
+    if(!row)throw new ApiError(404,'GROUP_NOT_AVAILABLE');
+    // Project an explicit public allowlist: no answer keys or explanations, even for released groups.
+    const g=row.data as Record<string,unknown>;
+    return {id:g.id,kind:g.kind,title:g.title,paper:g.paper,passage:g.passage,questions:g.questions,version:g.version,source:g.source,eligible:row.eligible};
+  }
   async active(uid: string) {
     const rows = await this.db.query(sql`select cet6_session_public(s) data from practice_sessions s where user_id=${uid}::uuid and status in ('active','paused') order by started_at desc`);
     return rows.map(r => r.data as Session);

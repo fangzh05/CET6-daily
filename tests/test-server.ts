@@ -6,6 +6,7 @@ import { createApp } from '../worker/app';
 import type { Env } from '../worker/auth';
 const data=await testDatabase();
 for(const kind of ['careful','matching','cloze'] as const)await importFixture(data.db,fixture(kind,kind));
+const preview=fixture('careful','preview');preview.paper.year=2024;preview.title='待核验测试文章 · 非六级真题';preview.release_status='pending';preview.content_status='incomplete';preview.question_status='incomplete';await importFixture(data.db,preview);
 const app=createApp({db:data.db,authenticate:async()=>({identity:'isolated-e2e-user',email:'e2e@example.invalid'})});
 const server=createServer(async(req,res)=>{
   const chunks:Buffer[]=[];for await(const c of req)chunks.push(Buffer.from(c));

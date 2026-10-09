@@ -12,6 +12,17 @@ describe('Worker API + real PostgreSQL execution (isolated PGlite test engine)',
   const json=async<T>(path:string,method='GET',body?:unknown,user='alice'):Promise<T>=>{const r=await request(path,method,body,user);expect(r.status,await r.clone().text()).toBeLessThan(300);return r.json() as Promise<T>;};
   beforeAll(async()=>{data=await testDatabase();for(const kind of ['careful','matching','cloze'] as const)await importFixture(data.db,fixture(kind,kind));app=createApp({db:data.db,authenticate:async req=>({identity:`test:${req.headers.get('x-test-user')??'alice'}`,email:'test@example.invalid'})});});
   afterAll(async()=>{await data.pg.close();});
+  it('opens pending groups for preview without leaking keys or enabling scoring',async()=>{
+    const pending=fixture('careful','preview');pending.paper.year=2024;pending.release_status='pending';pending.content_status='incomplete';pending.question_status='incomplete';
+    await importFixture(data.db,pending);
+    const list=await json<{id:string;eligible:boolean}[]>('/library');expect(list.find(g=>g.id===pending.id)?.eligible).toBe(false);
+    const response=await request(`/library/${pending.id}`);expect(response.status).toBe(200);const body=await response.text();expect(body).not.toMatch(/correct_answer|is_correct|grading_snapshot|explanation_snapshot/);
+    const preview=JSON.parse(body);expect(preview.questions).toHaveLength(5);expect(preview.passage.paragraphs.length).toBeGreaterThan(0);
+    expect((await request('/sessions','POST',{group_id:pending.id,practice_type:'new'})).status).toBe(409);
+    expect((await request('/library/not-a-group')).status).toBe(404);
+    await data.pg.query('update question_groups set archived=true where id=$1',[pending.id]);
+    expect((await request(`/library/${pending.id}`)).status).toBe(404);
+  });
   it('starts with real empty statistics and a complete daily reading group',async()=>{
     const dashboard=await json<{remaining:number;stats:Stats;recommendations:{question_count:number}[]}>('/dashboard');expect(dashboard.remaining).toBe(5);expect(dashboard.stats.first_count).toBe(0);expect(dashboard.recommendations[0].question_count).toBe(5);
   });
