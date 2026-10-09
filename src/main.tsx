@@ -1,5 +1,11 @@
-import { createRoot } from 'react-dom/client';
+import { createRoot, type Root } from 'react-dom/client';
 import { App } from './App';
 import './style.css';
-createRoot(document.getElementById('root')!).render(<App/>);
+import { lazy, Suspense } from 'react';
+const ReadingPlayground=lazy(()=>import('./reading/ReadingPlayground'));
+const FormalReading=lazy(()=>import('./reading/FormalReading'));
+const formalSession=location.pathname.match(/^\/reading\/([a-f0-9-]{36})\/?$/)?.[1];
+const root:Root=import.meta.hot?.data.root??createRoot(document.getElementById('root')!);
+if(import.meta.hot)import.meta.hot.data.root=root;
+root.render(location.pathname==='/playground/reading'?<Suspense fallback={<p>正在打开阅读工作区…</p>}><ReadingPlayground/></Suspense>:formalSession?<Suspense fallback={<p>正在打开阅读工作区…</p>}><FormalReading sessionId={formalSession}/></Suspense>:<App/>);
 if('serviceWorker' in navigator && import.meta.env.PROD) window.addEventListener('load',()=>{ void navigator.serviceWorker.register('/sw.js').catch(()=>{}); });

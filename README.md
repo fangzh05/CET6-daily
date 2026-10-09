@@ -1,5 +1,7 @@
 # CET6 Daily
 
+阅读 UI 原型：运行 `npm run dev -- --port 5174`，访问 `/playground/reading`（无 API/数据库依赖）。正式仔细阅读的可选入口为 `/reading/<session-id>`，复用现有会话与服务端判分。组件、截图、测试和集成限制见 [阅读工作区交付记录](docs/reading-ui-prototype.md)。
+
 个人六级阅读训练。React / TypeScript / Vite / Tailwind，Hono Worker API，Neon PostgreSQL、Drizzle。浏览器只访问同源 `/api`，业务数据库只用 Neon。
 
 ## 当前交付状态

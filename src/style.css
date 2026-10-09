@@ -11,3 +11,4 @@
 .preview-article p{line-height:1.9;margin-bottom:20px}.preview-questions .panel{margin-bottom:16px}
 .preview-switch{display:none}.preview-switch button[aria-pressed=true]{font-weight:700;background:#e5ece8}
 @media(max-width:767px){.preview-layout{display:block}.preview-switch{display:flex;gap:12px;margin-top:20px}.preview-layout [data-mobile-visible=false]{display:none}.preview-article,.preview-questions{max-height:70vh}.topbar nav{gap:4px}.topbar nav button{padding:8px}}
+.reading-optin{font-size:12px;color:var(--green);white-space:nowrap}@media(max-width:767px){.reading-optin{display:none}}

@@ -7,7 +7,8 @@ export type LocalDraft = Pick<Session,'choices'|'cursor'|'scroll'|'elapsed_ms'> 
 export type SaveState = 'saved'|'saving'|'failed'|'conflict';
 type Stored = { revision:number; draft:LocalDraft; dirty:boolean; token?:string };
 export const storageKey=(uid:string,sid:string)=>`cet6:draft:${uid}:${sid}`;
-export function useDraft(initial:Session,uid:string) {
+export function useDraft(initial:Session,uid:string,enabled=true) {
+  const active=useRef(enabled);active.current=enabled;
   const key=storageKey(uid,initial.id);
   const base:LocalDraft={choices:initial.choices,cursor:initial.cursor,scroll:initial.scroll,elapsed_ms:initial.elapsed_ms,paused:initial.status==='paused'};
   const stored=useRef<Stored|null>(null);
@@ -26,6 +27,7 @@ export function useDraft(initial:Session,uid:string) {
     catch { if(mounted.current) setState('failed'); }
   },[key]);
   const flush=useCallback(async():Promise<void>=>{
+    if(!active.current) return;
     if(saving.current) { await saving.current; if(dirty.current) return flush(); return; }
     if(blocked.current) throw new RequestError(409,'REVISION_CONFLICT');
     if(!dirty.current) return;
@@ -65,7 +67,7 @@ export function useDraft(initial:Session,uid:string) {
     let last=performance.now();
     const timer=setInterval(()=>{
       const now=performance.now(); const delta=Math.min(2000,Math.round(now-last)); last=now;
-      if(document.hidden || current.current.paused || clockPaused.current) return;
+      if(!active.current || document.hidden || current.current.paused || clockPaused.current) return;
       update(d=>{ const qid=initial.question_ids[d.cursor]; const choice=d.choices[qid]??{answer:null,uncertain:false,duration_ms:0}; return {...d,elapsed_ms:d.elapsed_ms+delta,choices:{...d.choices,[qid]:{...choice,duration_ms:choice.duration_ms+delta}}}; },false);
     },1000);
     return()=>clearInterval(timer);
