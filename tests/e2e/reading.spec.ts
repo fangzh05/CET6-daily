@@ -19,13 +19,13 @@ async function questions(page:import('@playwright/test').Page){
 test('complete reading, refresh recovery, evidence, and immutable first score',async({page})=>{
   const errors:string[]=[];page.on('pageerror',e=>errors.push(e.message));
   await page.goto('/');await page.getByRole('button',{name:'开始阅读'}).click();
-  await expect(page).toHaveURL(/\/reading\/[a-f0-9-]+$/);
+  await expect(page).toHaveURL(/#session=[a-f0-9-]+$/);
   const passage=page.locator('.rp-reader-scroll');await expect(passage).toBeVisible();
   await passage.evaluate(el=>{el.scrollTop=300;});await questions(page);
   await expect(page.getByRole('button',{name:'查看原文证据'})).toHaveCount(0);
   await page.getByRole('radio',{name:'B A football competition',exact:true}).check();
   await page.getByRole('button',{name:'标记此题',exact:true}).click();
-  await expect.poll(()=>page.request.get(new URL(page.url()).pathname.replace('/reading/','/api/sessions/')).then(r=>r.json()).then(s=>Object.values(s.choices).some((c:any)=>c.answer==='B'&&c.uncertain))).toBe(true);
+  await expect.poll(()=>page.request.get('/api/sessions/'+new URL(page.url()).hash.replace('#session=','')).then(r=>r.json()).then(s=>Object.values(s.choices).some((c:any)=>c.answer==='B'&&c.uncertain))).toBe(true);
   await page.reload();await questions(page);
   await expect(page.getByRole('radio',{name:'B A football competition',exact:true})).toBeChecked();
   await expect(page.getByRole('button',{name:'已标记',exact:true})).toHaveAttribute('aria-pressed','true');
