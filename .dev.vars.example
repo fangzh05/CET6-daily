@@ -1,0 +1,6 @@
+DATABASE_URL="postgresql://ROLE:PASSWORD@ep-DEVELOPMENT.REGION.aws.neon.tech/neondb?sslmode=require"
+DEVELOPMENT_DATABASE_HOST="ep-DEVELOPMENT.REGION.aws.neon.tech"
+ACCESS_ISSUER="https://YOUR-TEAM.cloudflareaccess.com"
+ACCESS_AUDIENCE="YOUR-APPLICATION-AUD"
+ALLOWED_EMAILS="you@example.com"
+ALLOWED_HOSTS="cet6.example.com"

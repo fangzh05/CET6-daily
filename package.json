@@ -1,0 +1,50 @@
+{
+  "name": "cet6-daily",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host 127.0.0.1",
+    "dev:api": "wrangler dev --env development --port 8787",
+    "build": "node scripts/build-sites.mjs",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:e2e": "playwright test",
+    "check": "npm run typecheck && npm test && npm run build",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "tsx --env-file=.env.local scripts/migrate.ts",
+    "bank:inspect": "tsx scripts/import-bank.ts --inspect",
+    "bank:validate": "tsx scripts/import-bank.ts --validate",
+    "bank:import": "tsx --env-file=.env.local scripts/import-bank.ts --import",
+    "deploy": "npm run check && wrangler deploy --env production",
+    "deploy:dry": "npm run build && wrangler deploy --env production --dry-run",
+    "build:web": "tsc --noEmit && vite build --outDir dist/client"
+  },
+  "dependencies": {
+    "@neondatabase/serverless": "^1.0.2",
+    "drizzle-orm": "^0.45.4",
+    "hono": "^4.10.0",
+    "jose": "^6.1.0",
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0",
+    "zod": "^4.1.12",
+    "yaml": "^2.8.1"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^5.20261008.1",
+    "@electric-sql/pglite": "^0.3.10",
+    "@playwright/test": "^1.56.0",
+    "@tailwindcss/vite": "^4.1.14",
+    "@types/node": "^24.7.0",
+    "@types/react": "^19.2.0",
+    "@types/react-dom": "^19.2.0",
+    "@vitejs/plugin-react": "^5.0.4",
+    "drizzle-kit": "^0.31.11",
+    "tailwindcss": "^4.1.14",
+    "tsx": "^4.20.6",
+    "typescript": "^5.9.3",
+    "vite": "^7.1.9",
+    "vitest": "^5.0.3",
+    "wrangler": "^4.43.0"
+  }
+}
