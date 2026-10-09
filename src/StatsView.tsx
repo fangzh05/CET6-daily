@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { api, friendly } from './api';
 import type { MistakePage, Stats } from '../shared/contracts';
 const percent=(n:number,d:number)=>d?`${Math.round(n/d*100)}%`:'—';
-const kinds={careful:'仔细阅读',matching:'长篇匹配',cloze:'选词填空'};
+const kinds={careful:'仔细阅读',matching:'匹配 / 新题型',cloze:'选词填空',use_of_english:'完形填空',translation:'翻译',writing:'写作'};
 export const categories={vocabulary:'词汇不认识',sentence:'长难句理解错误',locating:'定位错误',inference:'推断错误',distractor:'干扰项误判',time:'时间不足'};
 const chinaDay=()=>new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Shanghai',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
 export function StatsView({stats:s,onOpen}:{stats:Stats;onOpen:(sessionId:string,questionId?:string)=>Promise<void>}) {

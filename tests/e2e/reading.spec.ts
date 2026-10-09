@@ -12,9 +12,7 @@ test('pending library opens full context on desktop and mobile without grading',
 });
 // Careful reading uses the design-matched workspace on every entry path.
 async function questions(page:import('@playwright/test').Page){
-  const width=page.viewportSize()?.width??1280;
-  if(width<600)await page.getByRole('button',{name:'全屏',exact:true}).click();
-  else if(width<1024)await page.getByRole('tab',{name:/题目 ·/}).click();
+  await expect(page.getByRole('region',{name:'题目工作区'})).toBeVisible();
 }
 test('complete reading, refresh recovery, evidence, and immutable first score',async({page})=>{
   const errors:string[]=[];page.on('pageerror',e=>errors.push(e.message));

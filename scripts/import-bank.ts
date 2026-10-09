@@ -4,15 +4,17 @@ import { neon } from '@neondatabase/serverless';
 import { drizzle } from 'drizzle-orm/neon-http';
 import { sql } from 'drizzle-orm';
 import { inspectBank, validateBank } from './bank';
+import { inspectKy1Bank, validateKy1Bank } from './ky1-bank';
 import { databaseGuard } from './db-guard';
 import { isEligible } from '../shared/contracts';
 const arg = (name: string) => { const i=process.argv.indexOf(name); return i<0 ? undefined : process.argv[i+1]; };
 const root = arg('--bank') || process.env.QUESTION_BANK_PATH;
 try {
   if (!root) throw new Error('Missing question bank. Supply --bank <real-repository-path>. No built-in or synthetic bank is used.');
-  if (process.argv.includes('--inspect')) { console.log(JSON.stringify(await inspectBank(resolve(root)),null,2)); }
+  const exam=(arg('--exam')??'CET6').toUpperCase();if(!['CET6','KY1'].includes(exam))throw new Error('--exam must be CET6 or KY1.');
+  if (process.argv.includes('--inspect')) { console.log(JSON.stringify(exam==='KY1'?await inspectKy1Bank(resolve(root)):await inspectBank(resolve(root)),null,2)); }
   else {
-    const result=await validateBank(resolve(root),arg('--contract')??'docs/source-contract.json');
+    const result=exam==='KY1'?await validateKy1Bank(resolve(root),arg('--contract')??'docs/ky1-source-contract.json'):await validateBank(resolve(root),arg('--contract')??'docs/source-contract.json');
     const report={commit:result.commit,coverage:result.coverage,groups:result.groups.map(g=>({id:g.id,eligible:isEligible(g),questions:g.questions.length})),quarantine:result.quarantine,errors:result.errors};
     await mkdir('reports',{recursive:true}); await writeFile('reports/import-validation.json',JSON.stringify(report,null,2));
     console.log(JSON.stringify(report,null,2)); if (result.errors.length) throw new Error('Validation failed. No database writes were made.');

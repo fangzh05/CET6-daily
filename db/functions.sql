@@ -3,11 +3,11 @@
 CREATE OR REPLACE FUNCTION cet6_group(gid text) RETURNS jsonb LANGUAGE sql STABLE AS $$
 SELECT jsonb_build_object(
   'id',g.id,'kind',g.kind,'title',g.title,'version',g.version,
-  'paper',jsonb_build_object('id',p.id,'year',p.year,'month',p.month,'set',p.set),
+  'paper',jsonb_build_object('id',p.id,'exam',p.exam,'year',p.year,'month',p.month,'set',p.set),
   'passage',jsonb_build_object('id',pa.id,'word_bank',pa.word_bank,'paragraphs',
     (SELECT coalesce(jsonb_agg(jsonb_build_object('id',pp.id,'label',pp.label,'position',pp.position,'text',pp.text) ORDER BY pp.position),'[]') FROM passage_paragraphs pp WHERE pp.passage_id=pa.id)),
   'questions',(SELECT coalesce(jsonb_agg(jsonb_build_object('id',q.id,'number',q.number,'stem',q.stem,'options',q.options,'paragraph_ids',q.paragraph_ids) ORDER BY q.number),'[]') FROM questions q WHERE q.group_id=g.id AND NOT q.archived),
-  'source',jsonb_build_object('repository',sr.repository,'path',sr.path,'commit',sr.commit,'hash',sr.hash))
+  'source',jsonb_build_object('repository',sr.repository,'path',sr.path,'commit',sr.commit,'hash',sr.hash) || sr.metadata)
 FROM question_groups g JOIN papers p ON p.id=g.paper_id JOIN passages pa ON pa.id=g.passage_id JOIN source_references sr ON sr.group_id=g.id
 WHERE g.id=gid;
 $$;
@@ -40,7 +40,7 @@ BEGIN
   SELECT jsonb_object_agg(a.question_id,jsonb_build_object('correct_answer',a.correct_answer,'answer_version',a.answer_version,'source',a.source)) INTO keys
     FROM answer_keys a WHERE qs ? a.question_id AND a.verification_status='verified' AND a.verified_at IS NOT NULL;
   IF keys IS NULL OR (SELECT count(*) FROM jsonb_object_keys(keys))<>jsonb_array_length(qs) THEN RAISE EXCEPTION 'GROUP_NOT_VERIFIED'; END IF;
-  SELECT coalesce(jsonb_object_agg(e.question_id,jsonb_build_object('question_id',e.question_id,'explanation',e.explanation,'keyword_relation',e.keyword_relation,'evidence',e.evidence,'distractor_explanations',e.distractors,'skill_tags',e.skill_tags,'verification_status',e.verification_status)),'{}') INTO ex
+  SELECT coalesce(jsonb_object_agg(e.question_id,jsonb_build_object('question_id',e.question_id,'explanation',e.explanation,'keyword_relation',e.keyword_relation,'evidence',e.evidence,'distractor_explanations',e.distractors,'skill_tags',e.skill_tags,'verification_status',e.verification_status,'analysis',e.analysis)),'{}') INTO ex
     FROM explanations e WHERE qs ? e.question_id AND e.verification_status='verified';
   INSERT INTO practice_sessions(user_id,group_id,practice_type,question_ids,snapshot,grading_snapshot,explanation_snapshot)
     VALUES(uid,gid,ptype,qs,snap,keys,ex) RETURNING * INTO s;

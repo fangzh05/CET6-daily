@@ -1,0 +1,2 @@
+# Migration checksums cover exact bytes. Never rewrite historical line endings.
+/db/migrations/*.sql -text

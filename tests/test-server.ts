@@ -4,7 +4,9 @@ import { testDatabase, importFixture } from './database';
 import { fixture } from './fixture';
 import { createApp } from '../worker/app';
 import type { Env } from '../worker/auth';
+import { validateKy1Bank } from '../scripts/ky1-bank';
 const data=await testDatabase();
+if(process.env.KY1_BANK_PATH){const bank=await validateKy1Bank(process.env.KY1_BANK_PATH);if(bank.errors.length)throw new Error('KY1 preview validation failed');for(const group of bank.groups)await importFixture(data.db,group);}
 for(const kind of ['careful','matching','cloze'] as const)await importFixture(data.db,fixture(kind,kind));
 const preview=fixture('careful','preview');preview.paper.year=2024;preview.title='待核验测试文章 · 非六级真题';preview.release_status='pending';preview.content_status='incomplete';preview.question_status='incomplete';await importFixture(data.db,preview);
 const app=createApp({db:data.db,authenticate:async()=>({identity:'isolated-e2e-user',email:'e2e@example.invalid'})});

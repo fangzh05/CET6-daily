@@ -1,23 +1,24 @@
 import { z } from 'zod';
-export const kindSchema = z.enum(['careful', 'matching', 'cloze']);
+export const examSchema = z.enum(['CET6', 'KY1']);
+export const kindSchema = z.enum(['careful', 'matching', 'cloze', 'use_of_english', 'translation', 'writing']);
 export const practiceTypeSchema = z.enum(['new', 'retry', 'review']);
 export const errorCategorySchema = z.enum(['vocabulary', 'sentence', 'locating', 'inference', 'distractor', 'time']);
 export const verificationSchema = z.enum(['pending', 'verified', 'rejected']);
 const id = z.string().min(1).max(200);
 export const paragraphSchema = z.object({ id, label: z.string().min(1), text: z.string().min(1), position: z.number().int().nonnegative() }).strict();
 export const optionSchema = z.object({ key: z.string().min(1).max(4), text: z.string().min(1) }).strict();
-export const questionSchema = z.object({ id, number: z.number().int().positive(), stem: z.string().min(1), options: z.array(optionSchema).min(1), paragraph_ids: z.array(id).default([]) }).strict();
+export const questionSchema = z.object({ id, number: z.number().int().positive(), stem: z.string().min(1), options: z.array(optionSchema), paragraph_ids: z.array(id).default([]) }).strict();
 export const answerSchema = z.object({ question_id: id, correct_answer: z.string().min(1), source: z.string().min(1), verification_status: verificationSchema, verified_at: z.iso.datetime({ offset: true }).nullable(), answer_version: z.string().min(1), notes: z.string().optional() }).strict().superRefine((a, ctx) => {
   if (a.verification_status === 'verified' && !a.verified_at) ctx.addIssue({ code: 'custom', message: 'verified answer requires verified_at' });
 });
 export const explanationSchema = z.object({
   question_id: id, explanation: z.string().min(1), keyword_relation: z.string().min(1),
-  evidence: z.array(z.object({ paragraph_id: id, text: z.string().min(1) }).strict()).min(1),
+  evidence: z.array(z.object({ paragraph_id: id, text: z.string().min(1) }).strict()),
   distractor_explanations: z.record(z.string(), z.string().min(1)), skill_tags: z.array(z.string()).min(1),
-  verification_status: verificationSchema
+  verification_status: verificationSchema, analysis: z.unknown().optional()
 }).strict();
 export const groupSchema = z.object({
-  id, paper: z.object({ id, year: z.number().int().min(2000).max(2100), month: z.union([z.literal(6),z.literal(7),z.literal(9),z.literal(12)]), set: z.number().int().positive() }).strict(),
+  id, paper: z.object({ id, exam: examSchema.default('CET6'), year: z.number().int().min(2000).max(2100), month: z.number().int().min(0).max(12), set: z.number().int().positive() }).strict(),
   kind: kindSchema, title: z.string().min(1), passage: z.object({ id, paragraphs: z.array(paragraphSchema).min(1), word_bank: z.array(optionSchema).default([]) }).strict(),
   questions: z.array(questionSchema).min(1), content_status: z.enum(['complete', 'incomplete']), question_status: z.enum(['complete', 'incomplete']),
   release_status: z.enum(['released','pending']).default('pending'),
@@ -26,23 +27,28 @@ export const groupSchema = z.object({
 }).strict().superRefine((g, ctx) => {
   const fail = (message: string) => ctx.addIssue({ code: 'custom', message });
   const unique = (items: string[], name: string) => { if (new Set(items).size !== items.length) fail(`duplicate ${name}`); };
+  if(g.paper.exam==='CET6'&&(![6,7,9,12].includes(g.paper.month)||!['careful','matching','cloze'].includes(g.kind)))fail('Invalid CET6 paper or group type');
+  if(g.paper.exam==='KY1'&&(g.paper.month!==0||g.kind==='cloze'))fail('Invalid KY1 paper or group type');
   unique(g.questions.map(q => q.id), 'question IDs'); unique(g.questions.map(q => String(q.number)), 'question numbers');
   unique(g.passage.paragraphs.map(p => p.id), 'paragraph IDs'); unique(g.passage.paragraphs.map(p => p.label), 'paragraph labels');
   unique(g.passage.paragraphs.map(p => String(p.position)), 'paragraph positions'); unique(g.answers.map(a => a.question_id), 'answer IDs');
   unique(g.explanations.map(e => e.question_id), 'explanation IDs'); unique(g.passage.word_bank.map(w => w.key), 'word bank keys');
   for (const q of g.questions) {
+    if(!['translation','writing'].includes(g.kind)&&!q.options.length)fail(`${q.id}: objective question requires options`);
     unique(q.options.map(o => o.key), `option keys for ${q.id}`);
-    if (g.kind === 'careful' && q.options.map(o => o.key).sort().join('') !== 'ABCD') fail(`${q.id}: careful reading requires A/B/C/D`);
+    if (['careful','use_of_english'].includes(g.kind) && q.options.map(o => o.key).sort().join('') !== 'ABCD') fail(`${q.id}: multiple choice requires A/B/C/D`);
     if (q.paragraph_ids.some(p => !g.passage.paragraphs.some(row => row.id === p))) fail(`${q.id}: unknown paragraph`);
-    if (g.kind === 'matching' && q.options.some(o => !g.passage.paragraphs.some(p => p.label === o.key))) fail(`${q.id}: unknown matching label`);
+    if (g.kind === 'matching' && q.options.some(o => !g.passage.paragraphs.some(p => p.label === o.key) && !g.passage.word_bank.some(w => w.key === o.key))) fail(`${q.id}: unknown matching label`);
     if (g.kind === 'cloze' && q.options.some(o => !g.passage.word_bank.some(w => w.key === o.key && w.text === o.text))) fail(`${q.id}: option is not in word bank`);
   }
   if (g.content_status === 'complete' && g.question_status === 'complete') {
-    if (g.questions.length !== (g.kind === 'careful' ? 5 : 10)) fail('complete groups require 5 careful or 10 matching/cloze questions');
+    const expected=g.paper.exam==='CET6'?(g.kind==='careful'?5:10):g.kind==='use_of_english'?20:['careful','matching','translation'].includes(g.kind)?5:g.kind==='writing'?1:0;
+    if (g.questions.length !== expected) fail(`complete ${g.paper.exam} ${g.kind} groups require ${expected} questions`);
     if (g.kind === 'cloze') for (const q of g.questions) {
       const count = g.passage.paragraphs.reduce((sum, p) => sum + p.text.split(`{{${q.number}}}`).length - 1, 0);
       if (count !== 1) fail(`${q.id}: cloze must have exactly one {{${q.number}}} blank`);
     }
+    if(g.kind==='use_of_english')for(const q of g.questions){const count=g.passage.paragraphs.reduce((n,p)=>n+p.text.split(`{{${q.number}}}`).length-1,0);if(count!==1)fail(`${q.id}: expected one cloze blank`);}
   }
   for (const a of g.answers) {
     const q = g.questions.find(q => q.id === a.question_id);
@@ -53,8 +59,9 @@ export const groupSchema = z.object({
     const q = g.questions.find(q => q.id === e.question_id);
     if (!q) fail(`${e.question_id}: unknown explanation question`);
     if (e.verification_status !== 'verified') continue;
+    if(g.paper.exam==='CET6'&&!e.evidence.length)fail(`${e.question_id}: verified CET6 explanation requires evidence`);
     const a = g.answers.find(a => a.question_id === e.question_id && a.verification_status === 'verified');
-    if (!a) fail(`${e.question_id}: verified explanation requires verified answer`);
+    if (!a && !['translation','writing'].includes(g.kind)) fail(`${e.question_id}: verified explanation requires verified answer`);
     for (const ev of e.evidence) if (!g.passage.paragraphs.some(p => p.id === ev.paragraph_id && p.text.includes(ev.text))) fail(`${e.question_id}: evidence is not an exact passage substring`);
     for (const key of Object.keys(e.distractor_explanations)) if (!q?.options.some(o=>o.key===key) || key===a?.correct_answer) fail(`${e.question_id}: invalid distractor ${key}`);
     if(g.kind==='careful') for (const o of q?.options ?? []) if (o.key !== a?.correct_answer && !e.distractor_explanations[o.key]) fail(`${e.question_id}: missing distractor ${o.key}`);
@@ -74,7 +81,7 @@ export type Session = {
   elapsed_ms: number; question_ids: string[]; snapshot: PublicGroup; started_at: string; submitted_at: string | null;
 };
 export type Result = { session: Session; score: number; total: number; attempts: { question_id: string; submitted_answer: string | null; correct_answer: string; is_correct: boolean; uncertain: boolean; answer_version: string; explanation: z.infer<typeof explanationSchema> | null }[] };
-export type GroupSummary = { id: string; title: string; kind: BankGroup['kind']; question_count: number; year: number; month: number; set: number };
+export type GroupSummary = { id: string; title: string; kind: BankGroup['kind']; question_count: number; exam: BankGroup['paper']['exam']; year: number; month: number; set: number };
 export type Annotation = { id:string; passage_id:string; paragraph_id:string; selected_text:string; note:string; kind:'note'|'sentence'; created_at:string; title?:string };
 export type Mistake = { session_id:string; question_id:string; number:number; stem:string; submitted_answer:string|null; correct_answer:string; submitted_at:string; practice_type:'new'|'retry'|'review'; paper:BankGroup['paper']; kind:BankGroup['kind']; title:string };
 export type MistakePage = { day:string; items:Mistake[]; total:number; offset:number };
@@ -82,5 +89,5 @@ export const mistakeQuerySchema=z.object({day:z.iso.date(),offset:z.coerce.numbe
 export type Stats = { today_count: number; week_count: number; week_ms: number; first_count: number; first_correct: number; review_count: number; review_correct: number; average_ms: number; review_completion: { completed: number; due: number }; trend: { day: string; session_id:string; title:string; paper:BankGroup['paper']; kind:BankGroup['kind']; count: number; correct: number }[]; by_kind: { kind: BankGroup['kind']; count: number; correct: number }[]; by_year: { year: number; count: number; total: number }[]; errors: { category: string | null; count: number }[] };
 export type Dashboard = { daily_goal: number; remaining: number; recommendations: GroupSummary[]; due: { question_id: string; group_id: string; title: string; review_due_at: string }[]; active: Session[]; stats: Stats };
 export function isEligible(g: BankGroup): boolean {
-  return g.release_status === 'released' && g.content_status === 'complete' && g.question_status === 'complete' && g.questions.every(q => g.answers.some(a => a.question_id === q.id && a.verification_status === 'verified' && a.verified_at));
+  return !['translation','writing'].includes(g.kind) && g.release_status === 'released' && g.content_status === 'complete' && g.question_status === 'complete' && g.questions.every(q => g.answers.some(a => a.question_id === q.id && a.verification_status === 'verified' && a.verified_at));
 }

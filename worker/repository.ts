@@ -11,7 +11,7 @@ export class Repository {
   }
   async daily(uid: string, limit = 1) {
     return this.db.query<GroupSummary & Record<string, unknown>>(sql`
-      select g.id,g.title,g.kind,p.year,p.month,p.set,(select count(*)::int from questions q where q.group_id=g.id and not q.archived) question_count
+      select g.id,g.title,g.kind,p.exam,p.year,p.month,p.set,(select count(*)::int from questions q where q.group_id=g.id and not q.archived) question_count
       from question_groups g join papers p on p.id=g.paper_id
       where g.eligible and not g.archived and g.kind='careful'
         and not exists(select 1 from questions q join attempts a on a.question_id=q.id where q.group_id=g.id and a.user_id=${uid}::uuid and a.practice_type='new')
@@ -23,7 +23,7 @@ export class Repository {
     return row.data;
   }
   async library() {
-    return this.db.query(sql`select g.id,g.title,g.kind,p.year,p.month,p.set,g.eligible,
+    return this.db.query(sql`select g.id,g.title,g.kind,p.exam,p.year,p.month,p.set,g.eligible,
       (select count(*)::int from questions q where q.group_id=g.id and not q.archived) question_count
       from question_groups g join papers p on p.id=g.paper_id where not g.archived
       order by p.year desc,p.month desc,p.set,g.id`);
@@ -33,7 +33,9 @@ export class Repository {
     if(!row)throw new ApiError(404,'GROUP_NOT_AVAILABLE');
     // Project an explicit public allowlist: no answer keys or explanations, even for released groups.
     const g=row.data as Record<string,unknown>;
-    return {id:g.id,kind:g.kind,title:g.title,paper:g.paper,passage:g.passage,questions:g.questions,version:g.version,source:g.source,eligible:row.eligible};
+    const analyses=['translation','writing'].includes(String(g.kind))?await this.db.query(sql`select e.question_id,e.explanation,e.keyword_relation,e.evidence,e.distractors distractor_explanations,e.skill_tags,e.verification_status,e.analysis
+      from explanations e join questions q on q.id=e.question_id where q.group_id=${gid} and not q.archived and e.verification_status='verified' order by q.number`):[];
+    return {id:g.id,kind:g.kind,title:g.title,paper:g.paper,passage:g.passage,questions:g.questions,version:g.version,source:g.source,eligible:row.eligible,analyses:Object.fromEntries(analyses.map(e=>[e.question_id,e]))};
   }
   async active(uid: string) {
     const rows = await this.db.query(sql`select cet6_session_public(s) data from practice_sessions s where user_id=${uid}::uuid and status in ('active','paused') order by started_at desc`);
@@ -66,7 +68,7 @@ export class Repository {
       -- explanations after submission; never rewrite frozen history or grading.
       left join lateral (
         select jsonb_build_object('question_id',e.question_id,'explanation',e.explanation,'keyword_relation',e.keyword_relation,
-          'evidence',e.evidence,'distractor_explanations',e.distractors,'skill_tags',e.skill_tags,'verification_status',e.verification_status) explanation
+          'evidence',e.evidence,'distractor_explanations',e.distractors,'skill_tags',e.skill_tags,'verification_status',e.verification_status,'analysis',e.analysis) explanation
         from explanations e join questions q on q.id=e.question_id and q.group_id=s.group_id and not q.archived
         join question_groups g on g.id=q.group_id and not g.archived
         join answer_keys k on k.question_id=q.id and k.verification_status='verified' and k.verified_at is not null
