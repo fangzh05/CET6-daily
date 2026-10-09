@@ -12,7 +12,11 @@ export function App() {
   const [stats,setStats]=useState<Stats|null>(null); const [notes,setNotes]=useState<{id:string;selected_text:string;note:string;kind:string;created_at:string}[]|null>(null);
   const [loading,setLoading]=useState(true); const [error,setError]=useState(''); const [busy,setBusy]=useState(false);
   const refresh=async()=>{setLoading(true);setError('');try {const u=await api<{id:string;email:string}>('/me');setUser(u);setData(await api<Dashboard>('/dashboard'));}catch(e){setError(friendly(e));}finally{setLoading(false);}};
-  const open=async(s:Session)=>{const r=s.status==='submitted'?await api<Result>(`/sessions/${s.id}/result`):null;setResult(r);setSession(s);history.replaceState(null,'',`#session=${s.id}`);};
+  const open=async(s:Session)=>{
+    if(s.snapshot.kind==='careful'){location.assign(`/reading/${s.id}`);return;}
+    const r=s.status==='submitted'?await api<Result>(`/sessions/${s.id}/result`):null;
+    setResult(r);setSession(s);history.replaceState(null,'',`#session=${s.id}`);
+  };
   useEffect(()=>{void (async()=>{await refresh();const sid=location.hash.match(/^#session=([a-f0-9-]+)$/)?.[1];if(sid)try{await open(await api<Session>(`/sessions/${sid}`));}catch(e){setError(friendly(e));}})();},[]);
   const start=async(group_id:string,practice_type:'new'|'retry'|'review',question_ids?:string[])=>{setBusy(true);setError('');try{await open(await api<Session>('/sessions','POST',{group_id,practice_type,...(question_ids?{question_ids}:{})}));}catch(e){setError(friendly(e));}finally{setBusy(false);}};
   const leave=()=>{setSession(null);setResult(null);history.replaceState(null,'',location.pathname);void refresh();};

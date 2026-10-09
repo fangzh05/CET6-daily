@@ -11,7 +11,7 @@ npm run dev -- --port 5174 --strictPort
 
 Open http://127.0.0.1:5174/playground/reading. This route needs no API or Neon credentials. Vite parses the original Markdown fixture at configuration/build time. Generated TypeScript is checked in so `typecheck` also works in a fresh checkout. Do not edit generated files.
 
-An opt-in formal entry is `/reading/<existing-session-uuid>`; the old desktop careful-reading header links to it. It requires the normal authenticated same-origin API. The default practice entry and matching/cloze UI remain intact. No deployment was requested or performed.
+The default formal careful-reading entry is `/reading/<existing-session-uuid>`, reached from home start/resume, library and review. It requires the normal authenticated same-origin API. Matching/cloze retain their existing workspace. The UI has been published to the existing private Sites site.
 
 ## Repository findings
 
@@ -77,3 +77,12 @@ Mechanisms only, no copied source code, exam passages, graphics or business logi
 ![iPhone evidence](reading-screenshots/iphone-evidence.jpg)
 ![Desktop dark review](reading-screenshots/desktop-dark.jpg)
 ![iPad dark review](reading-screenshots/ipad-dark-review.jpg)
+
+
+## Design-matched default entry correction (2026-10-09)
+
+Home start/resume, library start, due review and legacy session hashes now route careful-reading sessions to `/reading/:id`. Previously the home page still mounted the old Reader; the new workspace was opt-in. Matching/cloze remain unchanged. Clicking the reading brand saves and pauses the active draft before returning home. New mobile sessions open the half drawer shown in the supplied design; saved drawer preferences are retained.
+
+The supplied 390×844 and 820×1180 screenshots were compared alongside actual captures with the same fixture/state. Header, serif article typography, wrapping, spacing, tablet tabs, drawer top and footer align visually. Captures: `reading-screenshots/design-match-iphone.png` and `reading-screenshots/design-match-ipad.png`.
+
+Manual in-app browser check on isolated PGlite: home start routes to the new formal UI, answer/flag persist after save-and-home, resume restores them, incomplete submission enters server-graded review. The existing E2E selectors were updated for the new default UI; that automated browser suite was not executed in this correction. No production learning records were created by this verification.
