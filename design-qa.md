@@ -1,15 +1,13 @@
-# Reading UI QA
+# Design QA — compact reading review
 
-Target: the supplied CET6 Daily functional/visual brief, existing React application and original source content. The user explicitly requested implementation directly in the existing project; no generated visual-selection stage was used.
+Status: PASS (2026-10-09)
 
-Viewport/state captures and evidence: [delivery record](docs/reading-ui-prototype.md), [screenshots](docs/reading-screenshots).
+Scope: preserve the existing typography, neutral surfaces, blue selection outline, and green/red review colors while giving questions more room.
 
-## Result
+Visual comparison: `reports/compact/comparison.jpg` combines the live source and implementation at 1280×800. Reviewed side by side: the desktop summary shrinks from 203px to 91px; the navigation retains its existing style. Different question content comes from the local original practice fixture, not a production data change.
 
-Local requirements-based visual/interaction QA: passed for inspected Chromium viewports. This is not a pixel-match comparison against a separately selected image and not a physical-device certification.
+The saved-score / retry row now follows question pagination inside normal scroll content on all sizes. No pinned footer remains.
 
-1440×900: editorial article and current question, bounded independent scroll, unobstructed submit; divider at 55% and drag/reset verified. 820×1180: mounted tabbed article/questions, comfortable line width, preserved answer state, dark review. 390×844: article-first layout, half/full/collapsed drawer, separate question scrolling, accessible height buttons, evidence and return operation. 320×720: no document horizontal overflow and all lower options reachable through the question scroller.
+Responsive interaction checks: at 390×844, dragging stops at 57.82% workspace height; at portrait iPad 820×1180, dragging stops at 41.79%. No preset snapping. The saved fractional height survives reload. Home/End keyboard controls, collapse/expand click, evidence jump and return work. Screenshots: `reports/compact/phone-custom.jpg`, `reports/compact/ipad-custom.jpg`.
 
-Fixed during QA: drawer drag triggering an extra click, accidental selection on draggable controls, completed formal-session timer, partial review-session navigation count, stale selection toolbar, and entry-module HMR root recreation. Article was memoized and initial-scroll props stabilized so answer and scroll updates do not re-render its unchanged text tree.
-
-No observed blocking visual issues remain in the inspected states. Outstanding verification: real iOS touch/Safari, VoiceOver, OS font enlargement, real approved bank and authenticated production Neon workflow. Local-only personal highlight sync is a documented limitation.
+Validation: typecheck, 33 tests, production build and Worker dry run pass; browser console has no errors. Pointer dragging was checked in Chromium device-sized viewports; physical iPhone/iPad Safari touch behavior was not tested.
