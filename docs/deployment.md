@@ -2,7 +2,7 @@
 
 ## Neon
 
-创建专用 CET6 Daily 项目。production 正式分支、development 开发分支分别记录精确 endpoint host。不要复用 WordLoop 数据库。账户、区域和连接须在 Neon 实际建立后验证；目前没有远程连接验收。
+创建专用 CET6 Daily 项目。production 正式分支、development 开发分支分别记录精确 endpoint host。不要复用 WordLoop 数据库。当前专用项目为 lingering-sound-78376612，AWS Singapore，PostgreSQL 18；production 与 development 分支已建立并分别迁移。已验证真实 HTTP 连接和事务失败回滚。
 
 development `.env.local` 使用 `.env.example`，`DATABASE_ENV=development`；生产命令使用独立未提交 `.env.production.local`：`DATABASE_ENV=production`、`DATABASE_URL`、直接连接 `DATABASE_DIRECT_URL`、`PRODUCTION_DATABASE_HOST`、`DEVELOPMENT_DATABASE_HOST`。
 
@@ -11,7 +11,7 @@ npx tsx --env-file=.env.production.local scripts/migrate.ts --production-reviewe
 npx tsx --env-file=.env.production.local scripts/import-bank.ts --import --bank /path/to/bank --production-reviewed --expected-commit EXACT_REVIEWED_SOURCE_COMMIT
 ```
 
-上线前先在 development 应用全部迁移，检查重复迁移、导入、并发草稿、重复提交与故障回滚。生产迁移须审核 SQL；禁止 destructive schema push。迁移器检查已部署哈希，所有待迁移 SQL 与 journal 在同一个 HTTP transaction 内执行，advisory lock 防并发；失败重新执行。Neon HTTP 实际事务行为仍需远程验收。
+上线前先在 development 应用全部迁移，检查重复迁移、导入、并发草稿、重复提交与故障回滚。生产迁移须审核 SQL；禁止 destructive schema push。迁移器检查已部署哈希，所有待迁移 SQL 与 journal 在同一个 HTTP transaction 内执行，advisory lock 防并发；失败重新执行。2026-10-09 已在 development 验证 HTTP 事务内建表、插入后故意除零失败，确认表也回滚不存在。
 
 ## Sites（当前选择）
 
