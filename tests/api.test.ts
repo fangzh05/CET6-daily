@@ -68,8 +68,11 @@ describe('Worker API + real PostgreSQL execution (isolated PGlite test engine)',
   it('import is idempotent, updates stable contents, preserves existing session snapshots',async()=>{
     const original=fixture('careful','careful');const s=await json<Session>('/sessions','POST',{group_id:'careful-group',practice_type:'retry'});
     original.passage.paragraphs[0].text+=' Updated content.';original.version='test-v2';original.answers[0].correct_answer='B';original.answers[0].answer_version='test-key-v2';
+    original.source.supplemental_sources=[{url:'https://example.invalid/source.docx',sha256:'c'.repeat(64),method:'ooxml_paragraphs',verification_status:'needs_review'}];
     await importFixture(data.db,original);await importFixture(data.db,original);
     const frozen=await json<Session>(`/sessions/${s.id}`);expect(frozen.snapshot.version).toBe('test-v1');expect(frozen.snapshot.passage.paragraphs[0].text).not.toContain('Updated content');
+    expect(frozen.snapshot.source.supplemental_sources).toBeUndefined();
+    const provenance=await data.pg.query<{metadata:{supplemental_sources:unknown[]}}>('select metadata from source_references where group_id=$1',['careful-group']);expect(provenance.rows[0].metadata.supplemental_sources).toEqual(original.source.supplemental_sources);
     expect((await data.pg.query<{n:number}>('select count(*)::int n from questions where group_id=$1',['careful-group'])).rows[0].n).toBe(5);
     original.answers=[];original.explanations=[];await importFixture(data.db,original);
     expect((await request('/groups/careful-group')).status).toBe(404);expect((await request('/sessions','POST',{group_id:'careful-group',practice_type:'new'},'charlie')).status).toBe(409);

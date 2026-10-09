@@ -20,6 +20,22 @@ const rawGroup=z.object({group_id:z.string(),part:z.string(),section:z.string(),
 const rawPaper=z.object({schema_version:z.literal(2),exam:z.literal('CET6'),paper_id:paperId,year:z.number().int(),month:z.union([z.literal(6),z.literal(7),z.literal(9),z.literal(12)]),set:z.number().int().min(1).max(3),title:z.string(),content_status:z.enum(['verified','needs_review','draft']),answer_status:z.enum(['verified','missing']),source:z.object({repo:z.string(),path:z.string(),sha256:z.string().regex(/^[a-f0-9]{64}$/),markdown:z.string()}).strict(),rollup:z.record(z.string(),z.number()),sections:z.array(z.object({part:z.string(),label:z.string().nullable(),name:z.string(),present:z.boolean(),directions:z.string(),body:z.array(z.string()),groups:z.array(rawGroup)}).strict())}).strict();
 const manifestSchema=z.object({schema_version:z.literal(1),exam:z.literal('CET6'),source_repo:z.string(),stage2_generated_at:z.string().optional(),stage2_totals:z.record(z.string(),z.number()).optional(),count:z.number().int(),papers:z.array(z.object({paper_id:paperId,year:z.number(),month:z.number(),set:z.number(),file_path:z.string(),source_sha256:z.string(),source_path:z.string()}).passthrough())}).strict();
 const usableSchema=z.object({schema_version:z.literal(2),rule:z.string(),generated_at:z.string(),count:z.number().int(),groups:z.array(z.object({paper_id:paperId,group_id:z.string(),part:z.string(),section:z.string(),question_ids:z.array(z.string())}).strict())}).strict();
+const supplementalSource=z.object({url:z.url(),sha256:z.string().regex(/^[a-f0-9]{64}$/),method:z.literal('ooxml_paragraphs'),verification_status:z.literal('needs_review')});
+const recoverySchema=z.record(paperId,z.array(z.object({section:z.enum(['A','B','C']),status:z.enum(['recovered_needs_review','unresolved']),groups:z.array(z.string()).optional(),source:supplementalSource.extend({shared_section_claim:z.object({paper_id:paperId,source:supplementalSource,status:z.literal('provider_claim_needs_review')}).optional()})}).passthrough()));
+async function supplementalAudit(root:string) {
+  let raw:string;
+  try {raw=await safeFile(root,'data/audit/reference_completion.json');}
+  catch(error) {if((error as NodeJS.ErrnoException).code==='ENOENT')return {};throw error;}
+  const recovery=recoverySchema.parse(JSON.parse(raw));
+  const pins=z.array(z.object({paper_id:paperId,url:z.url(),sha256:z.string().regex(/^[a-f0-9]{64}$/)}).passthrough()).parse(JSON.parse(await safeFile(root,'data/audit/reference_pins.json')));
+  if(new Set(pins.map(p=>p.paper_id)).size!==pins.length)throw new Error('Duplicate supplemental reference pin');
+  for(const [pid,records] of Object.entries(recovery))for(const record of records) {
+    const references=[{paper_id:pid,...record.source},...(record.source.shared_section_claim?[{paper_id:record.source.shared_section_claim.paper_id,...record.source.shared_section_claim.source}]:[])];
+    for(const reference of references)if(!pins.some(pin=>pin.paper_id===reference.paper_id&&pin.url===reference.url&&pin.sha256===reference.sha256))throw new Error(`Unpinned supplemental source: ${pid}`);
+    if(record.groups?.some(id=>!id.startsWith(`${pid}-reading-${record.section.toLowerCase()}-`)))throw new Error(`Supplemental group identity mismatch: ${pid}`);
+  }
+  return recovery;
+}
 export const parseStructuredPaper=(text:string)=>rawPaper.parse(JSON.parse(text));
 function frontmatter(text:string):Record<string,unknown> {
   // Article/questions are read from structured JSON; only Markdown metadata is parsed.
@@ -41,6 +57,7 @@ export async function validateBank(root:string,contractPath='docs/source-contrac
   if(contract.markdown_schema_sha256!==inspected.markdown_schema_sha256||contract.structured_schema_sha256!==inspected.structured_schema_sha256)throw new Error('Source schema changed. Read both schemas and review the adapter before updating source-contract.json.');
   const dirty=execFileSync('git',['-C',root,'status','--porcelain','--','data','docs/markdown-schema.md','docs/structured-schema.md'],{encoding:'utf8'}).trim();if(dirty)throw new Error('Question-bank data or schema has uncommitted changes; commit first.');
   const {manifest,usable}=inspected;if(manifest.count!==manifest.papers.length||new Set(manifest.papers.map(p=>p.paper_id)).size!==manifest.count)throw new Error('Manifest count/unique IDs mismatch');
+  const recovery=await supplementalAudit(root);
   if(usable.count!==usable.groups.length||new Set(usable.groups.map(g=>g.group_id)).size!==usable.count)throw new Error('Usable group count/IDs mismatch');
   const index=JSON.parse(await safeFile(root,'data/structured/index.json')) as {schema_version:number;papers:{paper_id:string}[]};
   if(index.schema_version!==2||index.papers.length!==manifest.count||index.papers.some(p=>!manifest.papers.some(m=>m.paper_id===p.paper_id)))throw new Error('Structured index does not match manifest');
@@ -71,6 +88,9 @@ export async function validateBank(root:string,contractPath='docs/source-contrac
         const ready=g.content_status==='verified'&&g.questions.length>0&&g.questions.every(q=>q.content_status==='verified'&&q.answer_status==='verified');
         if(release) {releaseSeen.add(g.group_id);if(!ready||release.paper_id!==paper.paper_id||release.question_ids.join(',')!==g.questions.map(q=>q.question_id).join(','))throw new Error(`Released group does not match verified source: ${g.group_id}`);}
         const kind=g.section==='A'?'cloze':g.section==='B'?'matching':'careful';
+        const recovered=recovery[paper.paper_id]?.find(record=>record.status==='recovered_needs_review'&&record.groups?.includes(g.group_id));
+        const supplemental_sources=recovered?[{url:recovered.source.url,sha256:recovered.source.sha256,method:recovered.source.method,verification_status:recovered.source.verification_status},...(recovered.source.shared_section_claim?[{...recovered.source.shared_section_claim.source,shared_from_paper_id:recovered.source.shared_section_claim.paper_id}]:[])]:undefined;
+        const supplementalHash=supplemental_sources?JSON.stringify(supplemental_sources):'';
         const word_bank=g.wordbank.map(w=>({key:w.label,text:w.text}));
         const paragraphs=g.passage.paragraphs.map(p=>({id:`${g.group_id}-p${String(p.index).padStart(2,'0')}`,label:p.label||String(p.index),position:p.index-1,text:kind==='cloze'?p.text.replace(/\[\[blank:(\d+)\]\]/g,'{{$1}}'):p.text}));
         const range=g.passage.banner?.match(/Questions (\d+) to (\d+)/i);
@@ -80,8 +100,8 @@ export async function validateBank(root:string,contractPath='docs/source-contrac
             id:g.group_id,paper:{id:paper.paper_id,year:paper.year,month:paper.month,set:paper.set},kind,title:`${paper.year} 年 ${paper.month} 月 · ${g.title||section.name}`,
             passage:{id:`${g.group_id}-passage`,paragraphs,word_bank},
             questions:g.questions.map(q=>({id:q.question_id,number:q.number,stem:kind==='cloze'?`选择第 ${q.number} 空的词汇`:q.stem,options:kind==='matching'?paragraphs.map(p=>({key:p.label,text:`Paragraph ${p.label}`})):kind==='cloze'?word_bank:q.options.map(o=>({key:o.label,text:o.text})),paragraph_ids:[]})),
-            content_status:g.content_status==='verified'?'complete':'incomplete',question_status:g.questions.every(q=>q.content_status==='verified')?'complete':'incomplete',release_status:release?'released':'pending',version:hash(text+answersText).slice(0,16),
-            source:{repository:'cet6-question-bank',path:file,commit:inspected.commit,hash:hash(text+answersText+md),raw_repository:paper.source.repo,raw_path:paper.source.path,raw_hash:paper.source.sha256,markdown_path:`data/markdown/${paper.source.markdown}`},
+            content_status:g.content_status==='verified'?'complete':'incomplete',question_status:g.questions.every(q=>q.content_status==='verified')?'complete':'incomplete',release_status:release?'released':'pending',version:hash(text+answersText+supplementalHash).slice(0,16),
+            source:{repository:'cet6-question-bank',path:file,commit:inspected.commit,hash:hash(text+answersText+md+supplementalHash),raw_repository:paper.source.repo,raw_path:paper.source.path,raw_hash:paper.source.sha256,markdown_path:`data/markdown/${paper.source.markdown}`,supplemental_sources},
             answers:g.questions.filter(q=>q.answer.verification_status==='verified').map(q=>{const a=q.answer;if(!a.correct_answer||!a.source||!a.source_sha256||!a.verified_at)throw new Error(`${q.question_id}: incomplete verified metadata`);return{question_id:q.question_id,correct_answer:a.correct_answer,source:a.source,verification_status:'verified',verified_at:/^\d{4}-\d{2}-\d{2}$/.test(a.verified_at)?`${a.verified_at}T00:00:00Z`:a.verified_at,answer_version:hash(JSON.stringify(a)),notes:a.reviewer_note};}),
             explanations:[]
           });groups.push(normalized);

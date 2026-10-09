@@ -21,7 +21,7 @@ export const groupSchema = z.object({
   kind: kindSchema, title: z.string().min(1), passage: z.object({ id, paragraphs: z.array(paragraphSchema).min(1), word_bank: z.array(optionSchema).default([]) }).strict(),
   questions: z.array(questionSchema).min(1), content_status: z.enum(['complete', 'incomplete']), question_status: z.enum(['complete', 'incomplete']),
   release_status: z.enum(['released','pending']).default('pending'),
-  version: z.string().min(1), source: z.object({ repository: z.string().min(1), path: z.string().min(1), commit: z.string().regex(/^[0-9a-f]{40}$/), hash: z.string().regex(/^[0-9a-f]{64}$/), raw_repository:z.string().optional(),raw_path:z.string().optional(),raw_hash:z.string().optional(),markdown_path:z.string().optional() }).strict(),
+  version: z.string().min(1), source: z.object({ repository: z.string().min(1), path: z.string().min(1), commit: z.string().regex(/^[0-9a-f]{40}$/), hash: z.string().regex(/^[0-9a-f]{64}$/), raw_repository:z.string().optional(),raw_path:z.string().optional(),raw_hash:z.string().optional(),markdown_path:z.string().optional(),supplemental_sources:z.array(z.object({url:z.url(),sha256:z.string().regex(/^[0-9a-f]{64}$/),method:z.string(),verification_status:z.literal('needs_review'),shared_from_paper_id:z.string().optional()}).strict()).optional() }).strict(),
   answers: z.array(answerSchema).default([]), explanations: z.array(explanationSchema).default([])
 }).strict().superRefine((g, ctx) => {
   const fail = (message: string) => ctx.addIssue({ code: 'custom', message });
