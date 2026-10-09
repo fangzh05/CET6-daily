@@ -21,3 +21,7 @@
 不允许将已存在 ID 搬到另一文章或题号；段落删除/重排拒绝，需明确数据迁移策略。所有学习历史使用 restrict 外键；不会因重新导入删除成绩。
 
 解析仅允许经过结构校验、逐段原文证据匹配的内容标记 verified。当前真实 source adapter 没有虚构解析；无核验解析时 UI 显示待核验。后续解析数据源须按 shared/contracts.ts 对接并验证原文；不得直接将模型输出作为核验内容。
+
+2026-10-09 补齐解析：`data/explanations/lazynote.json` 保存懒笔记逐题解析，248 个题组、1860 道阅读题，来源 HTML 的 URL 和 SHA-256 按组保留。抓取脚本为 `scripts/fetch-explanations.py`（Python requests、beautifulsoup4）；原始 HTML 缓存在忽略的 `vendor/lazynote`。先将 `validateBank` 的规范化题组导出为 `reports/explanation-input.json` 再抓取，随后 `bank:validate` 会再次检查题干、选项、答案与逐段原文证据，并将解析纳入内容哈希。证据仅允许排版标点/空白归一化匹配，保存的引文始终为题库原文的精确子串。主旨/态度题可从正确项同义改写中的原文片段定位；匹配题/选词题仅保存来源实际提供的邻段/竞争词排除说明，不杜撰其余排除项。2021-12 第 3 套选词使用已有源审计声明的第 1 套共享章节，并再次逐段、逐词、逐答案匹配；这不新增对共享关系的独立认证。
+
+只补解析使用 `scripts/import-explanations.ts --bank <path>` 预检，加 `--import` 执行；生产还需 `--production-reviewed --expected-commit <SHA>`。它在事务内再次核对数据库中的题干、选项、已核验答案和原文证据，原子 upsert 解析及 source_references 中的解析来源。任何题目不匹配则整批拒绝，不修改文章、答案、学习数据或旧会话解析快照。2026-10-09 生产回读确认：1860/1860 已核验解析、0 缺失、0 引文不匹配，248 组来源记录。原有 1 个会话和 5 条答题记录数量不变；旧会话继续使用原快照，新建练习使用补齐后的解析。开发库为旧版文章，完整预检只匹配 451 题，未强行覆盖其段落结构。
