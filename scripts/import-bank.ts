@@ -23,7 +23,13 @@ try {
       const batchId=crypto.randomUUID();
       await db.execute(sql`insert into import_batches(id,repository,commit,source_hash,status,report) values(${batchId}::uuid,${result.repository},${result.commit},${result.sourceHash},'running',${JSON.stringify(report)}::jsonb)`);
       try {
-        for (const g of result.groups) await db.execute(sql`select cet6_import(${JSON.stringify(g)}::jsonb,${batchId}::uuid)`);
+        const concurrency=Math.max(1,Math.min(16,Number(arg('--concurrency')??8)));
+        for (let i=0;i<result.groups.length;i+=concurrency) {
+          const chunk=result.groups.slice(i,i+concurrency);
+          const outcomes=await Promise.allSettled(chunk.map(g=>db.execute(sql`select cet6_import(${JSON.stringify(g)}::jsonb,${batchId}::uuid)`)));
+          const failures=outcomes.filter(x=>x.status==='rejected');
+          if(failures.length)throw new Error(`${failures.length}/${chunk.length} group imports failed: ${failures.map(x=>String(x.reason)).join('; ')}`);
+        }
         await db.execute(sql`update import_batches set status='completed' where id=${batchId}::uuid`);
         console.log(`Imported ${result.groups.length} groups. Batch ${batchId}.`);
       } catch (error) {
