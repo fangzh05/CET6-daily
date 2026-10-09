@@ -92,7 +92,10 @@ export class Repository {
         (select count(*)::int from a where practice_type='review') review_count,
         (select count(*)::int from a where practice_type='review' and is_correct) review_correct,
         (select coalesce(avg(response_duration),0)::float8 from a where practice_type='new') average_ms`);
-    const trend = await this.db.query(sql`select (submitted_at at time zone 'Asia/Shanghai')::date::text AS "day",count(*)::int count,count(*) filter(where is_correct)::int correct from attempts where user_id=${uid}::uuid and practice_type='new' and submitted_at >= ((date_trunc('day',now() at time zone 'Asia/Shanghai')-interval '6 days') at time zone 'Asia/Shanghai') group by "day" order by "day"`);
+    const trend = await this.db.query(sql`select (a.submitted_at at time zone 'Asia/Shanghai')::date::text AS "day",s.id session_id,s.snapshot->>'title' title,s.snapshot->'paper' paper,s.snapshot->>'kind' kind,count(*)::int count,count(*) filter(where a.is_correct)::int correct
+      from attempts a join practice_sessions s on s.id=a.session_id and s.user_id=a.user_id
+      where a.user_id=${uid}::uuid and a.practice_type='new' and a.submitted_at >= ((date_trunc('day',now() at time zone 'Asia/Shanghai')-interval '6 days') at time zone 'Asia/Shanghai')
+      group by "day",s.id order by "day" desc,s.submitted_at desc`);
     const by_kind = await this.db.query(sql`select s.snapshot->>'kind' kind,count(*)::int count,count(*) filter(where a.is_correct)::int correct from attempts a join practice_sessions s on s.id=a.session_id where a.user_id=${uid}::uuid and a.practice_type='new' group by s.snapshot->>'kind'`);
     const by_year = await this.db.query(sql`select p.year,(select count(distinct a.question_id)::int from attempts a join questions q on q.id=a.question_id join question_groups g on g.id=q.group_id where a.user_id=${uid}::uuid and a.practice_type='new' and g.paper_id=p.id) count,(select count(*)::int from questions q join question_groups g on g.id=q.group_id where g.paper_id=p.id and g.eligible and not g.archived and not q.archived) total from papers p order by p.year desc`);
     const errors = await this.db.query(sql`select error_category category,count(*)::int count from review_states where user_id=${uid}::uuid group by error_category`);
@@ -120,7 +123,24 @@ export class Repository {
     return r;
   }
   async annotations(uid: string, passage?: string) {
-    return this.db.query(sql`select id,passage_id,paragraph_id,selected_text,note,kind,created_at,updated_at from annotations where user_id=${uid}::uuid ${passage ? sql`and passage_id=${passage}` : sql``} order by created_at desc limit 200`);
+    return this.db.query(sql`select a.id,a.passage_id,a.paragraph_id,a.selected_text,a.note,a.kind,a.created_at,a.updated_at,
+      (select s.snapshot->>'title' from practice_sessions s where s.user_id=a.user_id and s.snapshot->'passage'->>'id'=a.passage_id order by s.started_at desc limit 1) title
+      from annotations a where a.user_id=${uid}::uuid ${passage ? sql`and a.passage_id=${passage}` : sql``} order by a.created_at desc limit 1000`);
+  }
+  async mistakes(uid:string,day:string,offset:number) {
+    const condition=sql`a.user_id=${uid}::uuid and not a.is_correct and s.status='submitted'
+      and a.submitted_at>=(${day}::date::timestamp at time zone 'Asia/Shanghai')
+      and a.submitted_at< ((${day}::date+1)::timestamp at time zone 'Asia/Shanghai')`;
+    const [count]=await this.db.query(sql`select count(*)::int total from attempts a join practice_sessions s on s.id=a.session_id and s.user_id=a.user_id where ${condition}`);
+    const items=await this.db.query(sql`select s.id session_id,a.question_id,(q->>'number')::int number,q->>'stem' stem,a.submitted_answer,a.correct_answer,a.submitted_at,a.practice_type,s.snapshot->'paper' paper,s.snapshot->>'kind' kind,s.snapshot->>'title' title
+      from attempts a join practice_sessions s on s.id=a.session_id and s.user_id=a.user_id
+      join lateral jsonb_array_elements(s.snapshot->'questions') q on q->>'id'=a.question_id
+      where ${condition} order by a.submitted_at desc,a.question_id limit 50 offset ${offset}`);
+    return {day,offset,total:Number(count.total),items};
+  }
+  async removeAnnotation(uid:string,id:string) {
+    const [row]=await this.db.query(sql`delete from annotations where id=${id}::uuid and user_id=${uid}::uuid returning id`);
+    if(!row)throw new ApiError(404,'ANNOTATION_NOT_FOUND');return row;
   }
   async annotate(uid: string, value: { passage_id: string; paragraph_id: string; selected_text: string; note: string; kind: string }) {
     // Exact substring and ownership via a user's frozen session context.

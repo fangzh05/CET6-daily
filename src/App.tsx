@@ -1,5 +1,5 @@
 import { lazy, Suspense, useEffect, useState } from 'react';
-import type { Dashboard, Session, Stats, Result } from '../shared/contracts';
+import type { Annotation, Dashboard, Session, Stats, Result } from '../shared/contracts';
 import { api, friendly, RequestError } from './api';
 import { Reader } from './Reader';
 import { StatsView } from './StatsView';
@@ -13,10 +13,12 @@ export function App() {
   const [theme,setTheme]=useState(readTheme);
   const [user,setUser]=useState<{id:string;email:string}|null>(null); const [data,setData]=useState<Dashboard|null>(null);
   const [session,setSession]=useState<Session|null>(null); const [result,setResult]=useState<Result|null>(null); const [tab,setTab]=useState<'today'|'stats'|'notes'|'library'>('today');
-  const [stats,setStats]=useState<Stats|null>(null); const [notes,setNotes]=useState<{id:string;selected_text:string;note:string;kind:string;created_at:string}[]|null>(null);
+  const [stats,setStats]=useState<Stats|null>(null); const [notes,setNotes]=useState<Annotation[]|null>(null);
+  const [focusQuestion,setFocusQuestion]=useState<string|undefined>();
   const [loading,setLoading]=useState(true); const [error,setError]=useState(''); const [busy,setBusy]=useState(false);
   const refresh=async()=>{setLoading(true);setError('');try {const u=await api<{id:string;email:string}>('/me');setUser(u);setData(await api<Dashboard>('/dashboard'));}catch(e){setError(friendly(e));}finally{setLoading(false);}};
-  const open=async(s:Session)=>{
+  const open=async(s:Session,questionId?:string)=>{
+    setFocusQuestion(questionId);
     const r=s.status==='submitted'?await api<Result>(`/sessions/${s.id}/result`):null;
     setResult(r);setSession(s);history.replaceState(null,'',`#session=${s.id}`);
   };
@@ -24,14 +26,14 @@ export function App() {
   const start=async(group_id:string,practice_type:'new'|'retry'|'review',question_ids?:string[])=>{setBusy(true);setError('');try{let next:Session;try{next=await api<Session>('/sessions','POST',{group_id,practice_type,...(question_ids?{question_ids}:{})});}catch(e){if(practice_type!=='new'||!(e instanceof RequestError)||e.code!=='ALREADY_PRACTICED')throw e;next=await api<Session>('/sessions','POST',{group_id,practice_type:'retry'});}await open(next);}catch(e){setError(friendly(e));}finally{setBusy(false);}};
   const leave=()=>{setTheme(readTheme());setSession(null);setResult(null);history.replaceState(null,'',location.pathname);void refresh();};
   const navigate=async(t:typeof tab)=>{setTab(t);setError('');try{if(t==='stats')setStats(await api<Stats>('/stats'));if(t==='notes')setNotes(await api('/annotations'));}catch(e){setError(friendly(e));}};
-  if(session && user && session.snapshot.kind==='careful')return <Suspense fallback={<p role="status">正在打开阅读工作区…</p>}><FormalReadingSession key={session.id} session={session} uid={user.id} result={result} onLeave={leave} onRetry={()=>start(session.group_id,'retry')}/></Suspense>;
-  if(session && user) return <Reader key={session.id} initial={session} uid={user.id} result={result} onLeave={leave} onSubmitted={async()=>{const r=await api<Result>(`/sessions/${session.id}/result`);setResult(r);setSession(r.session);}} onRetry={()=>start(session.group_id,'retry')}/>;
+  if(session && user && session.snapshot.kind==='careful')return <Suspense fallback={<p role="status">正在打开阅读工作区…</p>}><FormalReadingSession key={session.id} session={session} initialQuestionId={focusQuestion} uid={user.id} result={result} onLeave={leave} onRetry={()=>start(session.group_id,'retry')}/></Suspense>;
+  if(session && user) return <Reader key={session.id} initial={session} initialQuestionId={focusQuestion} uid={user.id} result={result} onLeave={leave} onSubmitted={async()=>{const r=await api<Result>(`/sessions/${session.id}/result`);setResult(r);setSession(r.session);}} onRetry={()=>start(session.group_id,'retry')}/>;
   return <div className="app-shell" data-theme={theme}>
     <header className="topbar"><a className="brand" href="/" aria-label="CET6 Daily 首页">CET6 <span>Daily</span></a><nav aria-label="主导航">{([['today','今日'],['library','题库'],['stats','统计'],['notes','笔记']] as const).map(([key,label])=><button key={key} aria-current={tab===key?'page':undefined} onClick={()=>void navigate(key)}>{label}</button>)}</nav><div className="home-header-actions"><span className="account-label">A LITTLE FOCUS, EVERY DAY.</span><button className="home-theme" aria-label={theme==='light'?'切换深色模式':'切换浅色模式'} onClick={()=>{const next=theme==='light'?'dark':'light';saveTheme(next);setTheme(next);}}>{theme==='light'?'深色':'浅色'}</button></div></header>
     <main className="dashboard">
       {error&&<div className="error" role="alert"><span>{error}</span><button onClick={()=>void refresh()}>重试</button></div>}
       {tab==='today'&&<>
-        <div className="page-heading"><div><p className="date-line">{new Intl.DateTimeFormat('zh-CN',{timeZone:'Asia/Shanghai',month:'long',day:'numeric',weekday:'long'}).format(new Date())}</p><p className="home-eyebrow">YOUR DAILY READING</p><h1>今天，读一篇。</h1><p className="muted">留出 10—20 分钟，从完整文章开始。</p></div><a className="home-demo" href="/playground/reading">体验阅读工作区 →</a></div>
+        <div className="page-heading"><div><p className="date-line">{new Intl.DateTimeFormat('zh-CN',{timeZone:'Asia/Shanghai',month:'long',day:'numeric',weekday:'long'}).format(new Date())}</p><p className="home-eyebrow">YOUR DAILY READING</p><h1>今天，读一篇。</h1><p className="muted">留出 10—20 分钟，从完整文章开始。</p></div></div>
         {loading?<div className="empty panel" role="status">正在读取今日学习记录…</div>:<>
           <section className="today-panel panel" aria-label="今日任务"><div className="section-title"><h2>今日任务</h2><label className="goal">每日目标 <select aria-label="每日目标题数" value={data?.daily_goal??5} disabled={!data||busy} onChange={async e=>{setBusy(true);try{await api('/settings','PATCH',{daily_goal:Number(e.target.value)});await refresh();}catch(e){setError(friendly(e));}finally{setBusy(false);}}}>{[5,10,15,20].map(n=><option key={n} value={n}>{n} 题</option>)}</select></label></div>
             <div className="task-metrics"><div><strong>{data?data.remaining:'—'}</strong><span>待完成新题</span></div><div><strong>{data?data.due.length:'—'}</strong><span>到期复习</span></div><div><strong>{data?Math.round(data.stats.week_ms/60000):'—'}<small> 分钟</small></strong><span>本周学习</span></div></div>
@@ -44,8 +46,8 @@ export function App() {
         <p className="footer-note">以真实作答为起点，以原文证据为依据。</p>
       </>}
       {tab==='library'&&<Library busy={busy} onStart={id=>void start(id,'new')}/>}
-      {tab==='stats'&&(stats?<StatsView stats={stats}/>:<div className="empty" role="status">正在读取统计…</div>)}
-      {tab==='notes'&&<><h1>阅读笔记</h1><p className="muted">留下值得再读的词句。</p>{notes?.length?notes.map(n=><article className="panel note" key={n.id}><blockquote>{n.selected_text}</blockquote><p>{n.note||'未添加笔记内容'}</p><small>{n.kind==='sentence'?'难句':'笔记'} · {new Date(n.created_at).toLocaleDateString('zh-CN')}</small></article>):<div className="empty panel">尚无笔记。阅读时选择原文即可保存。</div>}</>}
+      {tab==='stats'&&(stats?<StatsView stats={stats} onOpen={async(sid,qid)=>{setError('');try{await open(await api<Session>(`/sessions/${sid}`),qid);}catch(e){setError(friendly(e));}}}/>:<div className="empty" role="status">正在读取统计…</div>)}
+      {tab==='notes'&&<><h1>阅读笔记</h1><p className="muted">留下值得再读的词句。</p>{notes?.length?notes.map(n=><article className="panel note" key={n.id}><blockquote>{n.selected_text}</blockquote>{n.note&&<p>{n.note}</p>}<small>{n.title&&<>{n.title} · </>}{n.kind==='sentence'?'难句':n.note?'笔记':'高亮摘录'} · {new Date(n.created_at).toLocaleDateString('zh-CN')}</small></article>):<div className="empty panel">尚无笔记。阅读时选择原文，点击“高亮”或“写笔记”即可保存。</div>}</>}
     </main><footer className="site-footer"><span>CET6 Daily</span><span>{user?'学习进度已同步':'登录后同步学习进度'}</span></footer>
   </div>;
 }

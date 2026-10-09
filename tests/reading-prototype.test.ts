@@ -2,7 +2,7 @@ import { describe,it,expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { parseReadingFixture } from '../scripts/reading-fixture';
 import { initialState,restoreState } from '../src/reading/state';
-const source=readFileSync('fixtures/reading/quiet-city.md','utf8');
+const source=readFileSync('fixtures/reading/quiet-city.md','utf8').replace(/\r\n/g,'\n');
 const fixture=parseReadingFixture(source);
 describe('reading prototype build contract',()=>{
   it('separates answers and validates the original 500–700 word passage',()=>{expect(JSON.stringify(fixture.publicData)).not.toContain('correctOptionId');expect(fixture.publicData.paragraphs.flatMap(p=>p.text.split(/\s+/)).length).toBeGreaterThanOrEqual(500);expect(fixture.publicData.paragraphs.flatMap(p=>p.text.split(/\s+/)).length).toBeLessThanOrEqual(700);expect(fixture.reviews.some(r=>r.evidence.length>1)).toBe(true);expect(fixture.reviews.some(r=>r.evidence.length===0)).toBe(true);});

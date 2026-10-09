@@ -93,6 +93,22 @@ describe('Worker API + real PostgreSQL execution (isolated PGlite test engine)',
     expect((await json<unknown[]>('/annotations')).length).toBe(1);expect((await json<unknown[]>('/annotations','GET',undefined,'bob')).length).toBe(0);
     expect((await request('/annotations','POST',{passage_id:'careful-passage',paragraph_id:'careful-p0',selected_text:'Invented quote',note:'',kind:'note'})).status).toBe(400);
   });
+  it('lists only owned wrong attempts by Beijing day and preserves frozen paper context',async()=>{
+    const day=new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Shanghai'}).format(new Date());
+    const page=await json<{total:number;items:{session_id:string;question_id:string;paper:{year:number};kind:string;stem:string}[]}>(`/mistakes?day=${day}`);
+    expect(page.total).toBeGreaterThan(0);expect(page.items.every(i=>i.paper.year===2025&&i.kind==='careful'&&i.stem.includes('Synthetic'))).toBe(true);
+    for(const item of page.items){const result=await json<Result>(`/sessions/${item.session_id}/result`);expect(result.attempts.find(a=>a.question_id===item.question_id)?.is_correct).toBe(false);}
+    expect((await json<{total:number}>(`/mistakes?day=${day}`,'GET',undefined,'nobody')).total).toBe(0);
+    expect((await json<{items:unknown[]}>(`/mistakes?day=${day}&offset=1000`)).items).toEqual([]);
+    expect((await json<{total:number}>('/mistakes?day=2001-01-01')).total).toBe(0);
+    for(const query of ['day=2026-02-30','day=bad','day='+day+'&user_id=bad','day='+day+'&offset=-1'])expect((await request('/mistakes?'+query)).status).toBe(400);
+    const stats=await json<Stats>('/stats');expect(stats.trend.every(t=>t.session_id&&t.paper.year===2025&&t.kind&&t.title)).toBe(true);
+  });
+  it('removes excerpts only for their owner',async()=>{
+    const notes=await json<{id:string}[]>('/annotations');const id=notes[0].id;
+    expect((await request(`/annotations/${id}`,'DELETE',undefined,'bob')).status).toBe(404);
+    await json(`/annotations/${id}`,'DELETE');expect(await json('/annotations')).toEqual([]);
+  });
   it('rejects client user_id and cross-origin writes; prevents direct history mutation',async()=>{
     expect((await request('/sessions','POST',{group_id:'matching-group',practice_type:'new',user_id:crypto.randomUUID()})).status).toBe(400);
     expect((await app.request('http://localhost/api/settings',{method:'PATCH',headers:{Origin:'https://evil.invalid','Content-Type':'application/json'},body:'{"daily_goal":10}'},env)).status).toBe(403);

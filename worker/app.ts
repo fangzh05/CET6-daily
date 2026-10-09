@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import { z, ZodError } from 'zod';
-import { annotationSchema, draftSchema, startSchema, submitSchema, errorCategorySchema } from '../shared/contracts';
+import { annotationSchema, draftSchema, startSchema, submitSchema, errorCategorySchema, mistakeQuerySchema } from '../shared/contracts';
 import { ApiError, authenticate, checkOrigin, type Env, type Identity } from './auth';
 import { database, type Database } from './db';
 import { Repository } from './repository';
@@ -49,9 +49,11 @@ export function createApp(deps: Dependencies = {}) {
   // Review grades use the same atomic session submission; the client cannot send is_correct.
   app.post('/api/reviews/:id/grade', async c => { const b = submitSchema.parse(await c.req.json()); const sid = z.uuid().parse(c.req.param('id')); const s = await c.get('repo').session(c.get('user').id,sid); if (s.practice_type !== 'review') throw new ApiError(400,'REVIEW_SESSION_REQUIRED'); return c.json(await c.get('repo').submit(c.get('user').id,sid,b.submission_id,b.revision)); });
   app.get('/api/stats', async c => c.json(await c.get('repo').stats(c.get('user').id)));
+  app.get('/api/mistakes', async c => {const query=mistakeQuerySchema.parse(c.req.query());return c.json(await c.get('repo').mistakes(c.get('user').id,query.day,query.offset));});
   app.patch('/api/settings', async c => { const b = z.object({ daily_goal: z.number().int().min(1).max(50) }).strict().parse(await c.req.json()); await c.get('repo').setGoal(c.get('user').id,b.daily_goal); return c.json(b); });
   app.get('/api/annotations', async c => c.json(await c.get('repo').annotations(c.get('user').id,c.req.query('passage_id'))));
   app.post('/api/annotations', async c => c.json(await c.get('repo').annotate(c.get('user').id,annotationSchema.parse(await c.req.json())),201));
+  app.delete('/api/annotations/:id',async c=>c.json(await c.get('repo').removeAnnotation(c.get('user').id,z.uuid().parse(c.req.param('id')))));
   app.all('/api/*', c => c.json({ error: 'NOT_FOUND' },404));
   app.get('*', async c => { const response = await c.env.ASSETS.fetch(c.req.raw); const headers = new Headers(response.headers); headers.set('Cache-Control','private, no-store'); return new Response(response.body,{ status: response.status,headers }); });
   app.onError((error,c) => {
