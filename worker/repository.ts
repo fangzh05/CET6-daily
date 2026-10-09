@@ -60,9 +60,29 @@ export class Repository {
     const s = await this.session(uid, sid);
     if (s.status !== 'submitted') throw new ApiError(409, 'RESULT_NOT_SUBMITTED');
     const [score] = await this.db.query(sql`select score,total from practice_sessions where id=${sid}::uuid and user_id=${uid}::uuid`);
-    const rows = await this.db.query(sql`select a.question_id,a.submitted_answer,a.correct_answer,a.is_correct,a.uncertain,a.answer_version,s.explanation_snapshot->a.question_id explanation
+    const rows = await this.db.query(sql`select a.question_id,a.submitted_answer,a.correct_answer,a.is_correct,a.uncertain,a.answer_version,coalesce(nullif(s.explanation_snapshot->a.question_id,'null'::jsonb),supplement.explanation) explanation
       from attempts a join practice_sessions s on s.id=a.session_id and s.user_id=a.user_id
-      where a.session_id=${sid}::uuid and a.user_id=${uid}::uuid order by a.question_id`);
+      -- Old sessions can predate an explanation import. Supplement only missing
+      -- explanations after submission; never rewrite frozen history or grading.
+      left join lateral (
+        select jsonb_build_object('question_id',e.question_id,'explanation',e.explanation,'keyword_relation',e.keyword_relation,
+          'evidence',e.evidence,'distractor_explanations',e.distractors,'skill_tags',e.skill_tags,'verification_status',e.verification_status) explanation
+        from explanations e join questions q on q.id=e.question_id and q.group_id=s.group_id and not q.archived
+        join question_groups g on g.id=q.group_id and not g.archived
+        join answer_keys k on k.question_id=q.id and k.verification_status='verified' and k.verified_at is not null
+        where e.question_id=a.question_id and e.verification_status='verified'
+          and nullif(s.explanation_snapshot->a.question_id,'null'::jsonb) is null
+          and k.correct_answer=a.correct_answer and k.answer_version=a.answer_version
+          and s.snapshot->'passage'=(cet6_group(s.group_id)->'passage')
+          and exists(select 1 from jsonb_array_elements(s.snapshot->'questions') frozen
+            where frozen->>'id'=q.id and frozen->>'stem'=q.stem and frozen->'options'=q.options
+              and (frozen->>'number')::int=q.number and frozen->'paragraph_ids'=q.paragraph_ids)
+          and jsonb_array_length(e.evidence)>0
+          and not exists(select 1 from jsonb_array_elements(e.evidence) ev where not exists(
+            select 1 from jsonb_array_elements(s.snapshot->'passage'->'paragraphs') p
+              where p->>'id'=ev->>'paragraph_id' and length(ev->>'text')>0 and position(ev->>'text' in p->>'text')>0))
+      ) supplement on true
+      where s.status='submitted' and a.session_id=${sid}::uuid and a.user_id=${uid}::uuid order by a.question_id`);
     return { session: s, score: Number(score.score), total: Number(score.total), attempts: rows as unknown as Result['attempts'] };
   }
   async due(uid: string) {
