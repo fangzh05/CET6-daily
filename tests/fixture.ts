@@ -1,0 +1,14 @@
+import { groupSchema, type BankGroup } from '../shared/contracts';
+// Deliberately synthetic. Never bundled with the app or imported into a Neon business database.
+export function fixture(kind:BankGroup['kind']='careful',name='test'):BankGroup {
+  const n=kind==='careful'?5:10;
+  const paragraphs=Array.from({length:kind==='matching'?12:4},(_,i)=>({id:`${name}-p${i}`,label:kind==='matching'?String.fromCharCode(65+i):String(i+1),position:i,text:
+    `This is a synthetic test passage, not a CET-6 examination. Paragraph ${i+1} describes a reading experiment. Students read complete articles and save their work. Evidence can be checked against the actual paragraph. `+
+    'The researchers recorded answers carefully. Every conclusion was connected to a sentence in the passage. Readers took notes when they found a difficult sentence. '.repeat(5)+
+    (kind==='cloze'&&i===0?Array.from({length:10},(_,j)=>` {{${j+1}}}`).join(''): '')}));
+  const word_bank=kind==='cloze'?Array.from({length:15},(_,i)=>({key:String.fromCharCode(65+i),text:`word${i+1}`})):[];
+  const questions=Array.from({length:n},(_,i)=>({id:`${name}-q${i+1}`,number:(kind==='careful'?51:kind==='matching'?36:26)+i,stem:`Synthetic test question ${i+1}: what does the passage describe?`,options:kind==='careful'?['A','B','C','D'].map((key,j)=>({key,text:['A reading experiment','A football competition','An international journey','A cooking lesson'][j]})):kind==='matching'?paragraphs.map(p=>({key:p.label,text:`Paragraph ${p.label}`})):word_bank,paragraph_ids:[paragraphs[0].id]}));
+  if(kind==='cloze')paragraphs[0].text=paragraphs[0].text.replace(/\{\{(\d+)\}\}/g,(_,number)=>`{{${Number(number)+25}}}`);
+  return groupSchema.parse({id:`${name}-group`,paper:{id:`${name}-paper`,year:2025,month:12,set:kind==='careful'?1:kind==='matching'?2:3},kind,title:'测试专用合成文章 · 非六级真题',passage:{id:`${name}-passage`,paragraphs,word_bank},questions,content_status:'complete',question_status:'complete',release_status:'released',version:'test-v1',source:{repository:'test-only',path:`tests/${name}.json`,commit:'a'.repeat(40),hash:'b'.repeat(64)},answers:questions.map((q,i)=>({question_id:q.id,correct_answer:kind==='cloze'?String.fromCharCode(65+i):'A',source:'synthetic test oracle',verification_status:'verified',verified_at:'2025-01-01T00:00:00Z',answer_version:'test-key-v1'})),explanations:questions.map(q=>({question_id:q.id,explanation:'测试解析：文章明确描述阅读实验。',keyword_relation:'reading experiment 对应原文描述。',evidence:[{paragraph_id:paragraphs[0].id,text:'Students read complete articles and save their work.'}],distractor_explanations:Object.fromEntries(q.options.filter(o=>o.key!==(kind==='cloze'?String.fromCharCode(65+questions.indexOf(q)):'A')).map(o=>[o.key,'测试选项：原文没有提供对应支持。'])),skill_tags:['细节题'],verification_status:'verified'}))});
+}
+

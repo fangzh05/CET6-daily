@@ -1,0 +1,16 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "cet6-daily", "main": "worker/index.ts", "compatibility_date": "2025-10-08",
+  "compatibility_flags": ["nodejs_compat"], "workers_dev": false, "preview_urls": false,
+  "assets": { "directory": "./dist/client", "binding": "ASSETS", "not_found_handling": "single-page-application", "run_worker_first": true },
+  "env": {
+    "development": {
+      "name": "cet6-daily-development", "workers_dev": false, "preview_urls": false,
+      "vars": { "APP_ENV": "development", "LOCAL_DEV_AUTH": "true", "DEV_EMAIL": "local@cet6.invalid" }
+    },
+    "production": {
+      "name": "cet6-daily", "workers_dev": false, "preview_urls": false,
+      "vars": { "APP_ENV": "production", "LOCAL_DEV_AUTH": "false" }
+    }
+  }
+}

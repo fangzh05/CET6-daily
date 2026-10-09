@@ -1,0 +1,41 @@
+import { sql } from 'drizzle-orm';
+import { pgTable, text, integer, timestamp, uuid, jsonb, boolean, primaryKey, uniqueIndex, index, check } from 'drizzle-orm/pg-core';
+import type { Choice, PublicGroup } from '../shared/contracts';
+const time = (name: string) => timestamp(name, { withTimezone: true, mode: 'string' });
+export const papers = pgTable('papers', { id: text().primaryKey(), year: integer().notNull(), month: integer().notNull(), set: integer().notNull() }, t => [uniqueIndex('paper_identity').on(t.year, t.month, t.set), check('paper_month', sql`${t.month} in (6,7,9,12)`) ]);
+export const importBatches = pgTable('import_batches', { id: uuid().defaultRandom().primaryKey(), repository: text().notNull(), commit: text().notNull(), sourceHash: text('source_hash').notNull(), status: text().notNull(), report: jsonb().notNull(), createdAt: time('created_at').defaultNow().notNull() });
+export const passages = pgTable('passages', { id: text().primaryKey(), paperId: text('paper_id').notNull().references(() => papers.id, { onDelete: 'restrict' }), title: text().notNull(), version: text().notNull(), wordBank: jsonb('word_bank').notNull().default([]) });
+export const passageParagraphs = pgTable('passage_paragraphs', { id: text().primaryKey(), passageId: text('passage_id').notNull().references(() => passages.id, { onDelete: 'restrict' }), label: text().notNull(), position: integer().notNull(), text: text().notNull() }, t => [uniqueIndex('paragraph_position').on(t.passageId, t.position)]);
+export const questionGroups = pgTable('question_groups', { id: text().primaryKey(), paperId: text('paper_id').notNull().references(() => papers.id, { onDelete: 'restrict' }), passageId: text('passage_id').notNull().references(() => passages.id, { onDelete: 'restrict' }), kind: text().notNull(), title: text().notNull(), contentStatus: text('content_status').notNull(), questionStatus: text('question_status').notNull(), version: text().notNull(), eligible: boolean().notNull().default(false), archived: boolean().notNull().default(false) }, t => [index('group_recommendation').on(t.eligible, t.archived, t.kind), check('group_kind', sql`${t.kind} in ('careful','matching','cloze')`)]);
+export const questions = pgTable('questions', { id: text().primaryKey(), groupId: text('group_id').notNull().references(() => questionGroups.id, { onDelete: 'restrict' }), number: integer().notNull(), stem: text().notNull(), options: jsonb().notNull(), paragraphIds: jsonb('paragraph_ids').notNull().default([]), version: text().notNull(), archived: boolean().notNull().default(false) }, t => [uniqueIndex('question_number').on(t.groupId, t.number)]);
+export const answerKeys = pgTable('answer_keys', { questionId: text('question_id').primaryKey().references(() => questions.id, { onDelete: 'restrict' }), correctAnswer: text('correct_answer').notNull(), source: text().notNull(), verificationStatus: text('verification_status').notNull(), verifiedAt: time('verified_at'), answerVersion: text('answer_version').notNull() }, t => [check('verified_answer_timestamp', sql`${t.verificationStatus} <> 'verified' or ${t.verifiedAt} is not null`)]);
+export const explanations = pgTable('explanations', { questionId: text('question_id').primaryKey().references(() => questions.id, { onDelete: 'restrict' }), explanation: text().notNull(), keywordRelation: text('keyword_relation').notNull(), evidence: jsonb().notNull(), distractors: jsonb().notNull(), skillTags: jsonb('skill_tags').notNull(), verificationStatus: text('verification_status').notNull() });
+export const sourceReferences = pgTable('source_references', { groupId: text('group_id').primaryKey().references(() => questionGroups.id, { onDelete: 'restrict' }), repository: text().notNull(), path: text().notNull(), commit: text().notNull(), hash: text().notNull(), metadata: jsonb().notNull().default({}), batchId: uuid('batch_id').notNull().references(() => importBatches.id, { onDelete: 'restrict' }) });
+export const users = pgTable('users', { id: uuid().defaultRandom().primaryKey(), identity: text().notNull().unique(), email: text().notNull(), createdAt: time('created_at').defaultNow().notNull() });
+export const userSettings = pgTable('user_settings', { userId: uuid('user_id').primaryKey().references(() => users.id, { onDelete: 'cascade' }), dailyGoal: integer('daily_goal').notNull().default(5) }, t => [check('daily_goal_bounds', sql`${t.dailyGoal} between 1 and 50`)]);
+export const practiceSessions = pgTable('practice_sessions', {
+  id: uuid().defaultRandom().primaryKey(), userId: uuid('user_id').notNull().references(() => users.id, { onDelete: 'restrict' }),
+  groupId: text('group_id').notNull().references(() => questionGroups.id, { onDelete: 'restrict' }), practiceType: text('practice_type').notNull(),
+  status: text().notNull().default('active'), revision: integer().notNull().default(0), choices: jsonb().$type<Record<string, Choice>>().notNull().default({}),
+  cursor: integer().notNull().default(0), scroll: integer().notNull().default(0), elapsedMs: integer('elapsed_ms').notNull().default(0),
+  questionIds: jsonb('question_ids').$type<string[]>().notNull(), snapshot: jsonb().$type<PublicGroup>().notNull(),
+  gradingSnapshot: jsonb('grading_snapshot').notNull(), explanationSnapshot: jsonb('explanation_snapshot').notNull(),
+  submissionId: uuid('submission_id'), score: integer(), total: integer(), startedAt: time('started_at').defaultNow().notNull(), submittedAt: time('submitted_at')
+}, t => [index('session_user_status').on(t.userId, t.status), uniqueIndex('submission_id_unique').on(t.submissionId), uniqueIndex('session_user_pair').on(t.id, t.userId), check('session_type', sql`${t.practiceType} in ('new','retry','review')`), check('session_status', sql`${t.status} in ('active','paused','submitted')`)]);
+export const attempts = pgTable('attempts', {
+  id: uuid().defaultRandom().primaryKey(), sessionId: uuid('session_id').notNull().references(() => practiceSessions.id, { onDelete: 'restrict' }),
+  userId: uuid('user_id').notNull().references(() => users.id, { onDelete: 'restrict' }), questionId: text('question_id').notNull().references(() => questions.id, { onDelete: 'restrict' }),
+  submittedAnswer: text('submitted_answer'), correctAnswer: text('correct_answer').notNull(), isCorrect: boolean('is_correct').notNull(), uncertain: boolean().notNull(),
+  responseDuration: integer('response_duration').notNull(), practiceType: text('practice_type').notNull(), answerVersion: text('answer_version').notNull(), submittedAt: time('submitted_at').notNull()
+}, t => [uniqueIndex('attempt_session_question').on(t.sessionId, t.questionId), uniqueIndex('attempt_first_unique').on(t.userId, t.questionId).where(sql`${t.practiceType} = 'new'`), index('attempt_user_date').on(t.userId, t.submittedAt), check('duration_positive', sql`${t.responseDuration} >= 0`)]);
+export const reviewStates = pgTable('review_states', {
+  userId: uuid('user_id').notNull().references(() => users.id, { onDelete: 'restrict' }), questionId: text('question_id').notNull().references(() => questions.id, { onDelete: 'restrict' }),
+  firstWrongAt: time('first_wrong_at'), lastReviewedAt: time('last_reviewed_at'), reviewDueAt: time('review_due_at').notNull(),
+  wrongCount: integer('wrong_count').notNull().default(0), reviewCount: integer('review_count').notNull().default(0), step: integer().notNull().default(0), masteryState: text('mastery_state').notNull().default('learning'), errorCategory: text('error_category')
+}, t => [primaryKey({ columns: [t.userId, t.questionId] }), index('review_user_due').on(t.userId, t.reviewDueAt), check('review_step', sql`${t.step} between 0 and 3`)]);
+export const annotations = pgTable('annotations', {
+  id: uuid().defaultRandom().primaryKey(), userId: uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }), passageId: text('passage_id').notNull().references(() => passages.id, { onDelete: 'restrict' }),
+  paragraphId: text('paragraph_id').notNull().references(() => passageParagraphs.id, { onDelete: 'restrict' }), selectedText: text('selected_text').notNull(), note: text().notNull(), kind: text().notNull(), createdAt: time('created_at').defaultNow().notNull(), updatedAt: time('updated_at').defaultNow().notNull()
+}, t => [index('annotation_user_passage').on(t.userId, t.passageId)]);
+
+
