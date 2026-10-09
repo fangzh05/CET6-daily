@@ -1,3 +1,4 @@
+import { loadExplanations, attachExplanations } from './explanations';
 import { createHash } from 'node:crypto';
 import { readFile, realpath } from 'node:fs/promises';
 import { resolve, relative, isAbsolute } from 'node:path';
@@ -53,6 +54,7 @@ export async function inspectBank(root:string) {
 }
 export async function validateBank(root:string,contractPath='docs/source-contract.json') {
   const inspected=await inspectBank(root);
+  const explanationSources=await loadExplanations();
   const contract=z.object({adapter:z.literal('workbuddy-structured-v2'),markdown_schema_sha256:z.string(),structured_schema_sha256:z.string()}).strict().parse(JSON.parse((await readFile(contractPath,'utf8')).replace(/^\uFEFF/,'')));
   if(contract.markdown_schema_sha256!==inspected.markdown_schema_sha256||contract.structured_schema_sha256!==inspected.structured_schema_sha256)throw new Error('Source schema changed. Read both schemas and review the adapter before updating source-contract.json.');
   const dirty=execFileSync('git',['-C',root,'status','--porcelain','--','data','docs/markdown-schema.md','docs/structured-schema.md'],{encoding:'utf8'}).trim();if(dirty)throw new Error('Question-bank data or schema has uncommitted changes; commit first.');
@@ -104,13 +106,14 @@ export async function validateBank(root:string,contractPath='docs/source-contrac
             source:{repository:'cet6-question-bank',path:file,commit:inspected.commit,hash:hash(text+answersText+md+supplementalHash),raw_repository:paper.source.repo,raw_path:paper.source.path,raw_hash:paper.source.sha256,markdown_path:`data/markdown/${paper.source.markdown}`,supplemental_sources},
             answers:g.questions.filter(q=>q.answer_status==='verified'&&q.answer.verification_status==='verified').map(q=>{const a=q.answer;if(!a.correct_answer||!a.source||!a.source_sha256||!a.verified_at)throw new Error(`${q.question_id}: incomplete verified metadata`);return{question_id:q.question_id,correct_answer:a.correct_answer,source:a.source,verification_status:'verified',verified_at:/^\d{4}-\d{2}-\d{2}$/.test(a.verified_at)?`${a.verified_at}T00:00:00Z`:a.verified_at,answer_version:hash(JSON.stringify(a)),notes:a.reviewer_note};}),
             explanations:[]
-          });groups.push(normalized);
+          });const overlay=explanationSources.find(s=>s.group_id===normalized.id);groups.push(overlay?attachExplanations(normalized,overlay):normalized);
         }catch(error){const message=error instanceof Error?error.message:String(error);quarantine.push({group_id:g.group_id,reason:message});if(release)throw new Error(`Released group invalid: ${message}`);}
       }
     }catch(error){errors.push({path:file,message:error instanceof Error?error.message:String(error)});}
   }
   for(const release of usable.groups)if(release.part==='III'&&!releaseSeen.has(release.group_id))errors.push({path:'usable_groups.json',message:`Orphan released group ${release.group_id}`});
-  return {groups,errors,quarantine,commit:inspected.commit,repository:'cet6-question-bank',sourceHash:hash(groups.map(g=>g.source.hash).join('')),coverage:{papers:manifest.count,reading_groups:readingGroups,source_questions:sourceQuestions,source_verified_answers:verifiedAnswers,normalized_groups:groups.length,quarantined_groups:quarantine.length,release_ready:groups.filter(g=>g.release_status==='released').length}};
+  for(const source of explanationSources)if(!groups.some(g=>g.id===source.group_id))errors.push({path:'data/explanations/lazynote.json',message:`Orphan explanation group ${source.group_id}`});
+  return {groups,errors,quarantine,commit:inspected.commit,repository:'cet6-question-bank',sourceHash:hash(groups.map(g=>g.source.hash).join('')),coverage:{papers:manifest.count,verified_explanations:groups.reduce((n,g)=>n+g.explanations.length,0),reading_groups:readingGroups,source_questions:sourceQuestions,source_verified_answers:verifiedAnswers,normalized_groups:groups.length,quarantined_groups:quarantine.length,release_ready:groups.filter(g=>g.release_status==='released').length}};
 }
 
 

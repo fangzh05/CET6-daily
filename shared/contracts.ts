@@ -21,7 +21,7 @@ export const groupSchema = z.object({
   kind: kindSchema, title: z.string().min(1), passage: z.object({ id, paragraphs: z.array(paragraphSchema).min(1), word_bank: z.array(optionSchema).default([]) }).strict(),
   questions: z.array(questionSchema).min(1), content_status: z.enum(['complete', 'incomplete']), question_status: z.enum(['complete', 'incomplete']),
   release_status: z.enum(['released','pending']).default('pending'),
-  version: z.string().min(1), source: z.object({ repository: z.string().min(1), path: z.string().min(1), commit: z.string().regex(/^[0-9a-f]{40}$/), hash: z.string().regex(/^[0-9a-f]{64}$/), raw_repository:z.string().optional(),raw_path:z.string().optional(),raw_hash:z.string().optional(),markdown_path:z.string().optional(),supplemental_sources:z.array(z.object({url:z.url(),sha256:z.string().regex(/^[0-9a-f]{64}$/),method:z.string(),verification_status:z.literal('needs_review'),shared_from_paper_id:z.string().optional()}).strict()).optional() }).strict(),
+  version: z.string().min(1), source: z.object({ repository: z.string().min(1), path: z.string().min(1), commit: z.string().regex(/^[0-9a-f]{40}$/), hash: z.string().regex(/^[0-9a-f]{64}$/), raw_repository:z.string().optional(),raw_path:z.string().optional(),raw_hash:z.string().optional(),markdown_path:z.string().optional(),explanation_sources:z.array(z.object({url:z.url(),sha256:z.string().regex(/^[0-9a-f]{64}$/),method:z.literal('html_rp_ana_exact_evidence_v1')}).strict()).optional(),supplemental_sources:z.array(z.object({url:z.url(),sha256:z.string().regex(/^[0-9a-f]{64}$/),method:z.string(),verification_status:z.literal('needs_review'),shared_from_paper_id:z.string().optional()}).strict()).optional() }).strict(),
   answers: z.array(answerSchema).default([]), explanations: z.array(explanationSchema).default([])
 }).strict().superRefine((g, ctx) => {
   const fail = (message: string) => ctx.addIssue({ code: 'custom', message });
@@ -56,7 +56,8 @@ export const groupSchema = z.object({
     const a = g.answers.find(a => a.question_id === e.question_id && a.verification_status === 'verified');
     if (!a) fail(`${e.question_id}: verified explanation requires verified answer`);
     for (const ev of e.evidence) if (!g.passage.paragraphs.some(p => p.id === ev.paragraph_id && p.text.includes(ev.text))) fail(`${e.question_id}: evidence is not an exact passage substring`);
-    for (const o of q?.options ?? []) if (o.key !== a?.correct_answer && !e.distractor_explanations[o.key]) fail(`${e.question_id}: missing distractor ${o.key}`);
+    for (const key of Object.keys(e.distractor_explanations)) if (!q?.options.some(o=>o.key===key) || key===a?.correct_answer) fail(`${e.question_id}: invalid distractor ${key}`);
+    if(g.kind==='careful') for (const o of q?.options ?? []) if (o.key !== a?.correct_answer && !e.distractor_explanations[o.key]) fail(`${e.question_id}: missing distractor ${o.key}`);
   }
 });
 export type BankGroup = z.infer<typeof groupSchema>;

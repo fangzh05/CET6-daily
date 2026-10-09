@@ -28,7 +28,7 @@ try {
           const chunk=result.groups.slice(i,i+concurrency);
           const outcomes=await Promise.allSettled(chunk.map(g=>db.execute(sql`select cet6_import(${JSON.stringify(g)}::jsonb,${batchId}::uuid)`)));
           const failures=outcomes.filter(x=>x.status==='rejected');
-          if(failures.length)throw new Error(`${failures.length}/${chunk.length} group imports failed: ${failures.map(x=>String(x.reason)).join('; ')}`);
+          if(failures.length)throw new Error(`${failures.length}/${chunk.length} group imports failed: ${outcomes.flatMap((x,index)=>x.status==='rejected'?[`${chunk[index].id}: ${x.reason?.cause?.message??x.reason?.message??'unknown database error'}`]:[]).join('; ')}`);
         }
         await db.execute(sql`update import_batches set status='completed' where id=${batchId}::uuid`);
         console.log(`Imported ${result.groups.length} groups. Batch ${batchId}.`);
