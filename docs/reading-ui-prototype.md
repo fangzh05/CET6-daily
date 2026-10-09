@@ -42,7 +42,7 @@ Submission reuses `PATCH /api/sessions/:id` followed by `POST /api/sessions/:id/
 
 The mock entry never invokes business APIs. The formal entry never invokes the mock grading path. Formal UI preferences/highlights are local and scoped to user/session; existing annotation tables are not repurposed. No database migrations, original bank edits, imports, production writes or credential changes.
 
-Remaining integration gaps: approved real bank release and verified evidence/analysis coverage; real authenticated Neon/device end-to-end acceptance. New personal highlight ranges are local only and do not sync across devices. Matching/cloze retain the old supported workspace and are not implemented in the new single-choice adapter.
+Production recheck (2026-10-09): 248 eligible groups and 1,860 questions are already released; verified explanations remain 0. Source bank validation passed with 248 release-ready groups and no quarantined groups. No production import was needed. Exact evidence remains unavailable for those real questions, and the UI explicitly reports that limitation. Remaining integration gaps: verified evidence/analysis coverage and real authenticated Neon/device end-to-end acceptance. New personal highlight ranges are local only and do not sync across devices. Matching/cloze retain the old supported workspace and are not implemented in the new single-choice adapter.
 
 ## Validation (2026-10-09)
 
