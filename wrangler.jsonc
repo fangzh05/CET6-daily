@@ -10,7 +10,24 @@
     },
     "production": {
       "name": "cet6-daily", "workers_dev": false, "preview_urls": false,
-      "vars": { "APP_ENV": "production", "LOCAL_DEV_AUTH": "false" }
+      "vars": { "APP_ENV": "production", "LOCAL_DEV_AUTH": "false" },
+      // Custom domains. The zone must already exist in this account. Both hosts
+      // must also appear in the ALLOWED_HOSTS secret; the worker rejects any
+      // request whose Host is not listed there.
+      "routes": [
+        { "pattern": "cet6-test.zehaoo.top", "custom_domain": true }
+        // Stage 2, enabled only after the test host is verified:
+        // , { "pattern": "cet6.zehaoo.top", "custom_domain": true }
+      ]
+      // Account-specific values are secrets, never committed (this repository is
+      // public). Set them once per environment:
+      //   npx wrangler secret put DATABASE_URL      --env production
+      //   npx wrangler secret put ACCESS_ISSUER     --env production
+      //   npx wrangler secret put ACCESS_AUDIENCE   --env production
+      //   npx wrangler secret put ALLOWED_EMAILS    --env production
+      //   npx wrangler secret put ALLOWED_HOSTS     --env production
+      // Optional, only for data-preserving identity migration (see docs/deployment.md):
+      //   npx wrangler secret put IDENTITY_ALIASES  --env production
     }
   }
 }

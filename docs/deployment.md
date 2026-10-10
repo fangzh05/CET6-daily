@@ -25,9 +25,25 @@ Sites 专用入口必须只在该 dispatcher 后运行。身份 header 的安全
 
 使用 wrangler.jsonc 的 production。配置应用域名并启用 Access self-hosted application，仅 allow 指定邮箱；任何公开别名都需同等保护。workers.dev 和 preview URL 已关闭。
 
+自有域名 `zehaoo.top` 已托管于 Cloudflare（zone `170f612abe27b88962aa0a957b7310db`，NS 已由 Spaceship 切至 `devin/gemma.ns.cloudflare.com`）。CET6 Daily 使用独立子域，先在 `cet6-test.zehaoo.top` 验收，通过后再启用 `cet6.zehaoo.top`（wrangler.jsonc 的 routes 已按此顺序分阶段书写）。同一 zone 下的其他项目不受影响：路由是精确主机名，不覆盖通配符。
+
 设置 secret DATABASE_URL；设置 `ACCESS_ISSUER=https://TEAM.cloudflareaccess.com`、`ACCESS_AUDIENCE`、`ALLOWED_EMAILS`、`ALLOWED_HOSTS`。Worker 校验 RS256 签名、issuer、audience、exp、iat、sub 和 email。所有静态请求也运行 Worker 验证，API 默认 private,no-store。禁止浏览器数据库直连或生产 LOCAL_DEV_AUTH。
 
-`npm run deploy` 先完整 check 再部署。当前账号没有 Access 配置权限，Access 应用/域名尚未远程配置。
+`ALLOWED_HOSTS` 必须逐字列出实际使用的主机；未列入的 Host 直接 403 HOST_NOT_ALLOWED。Access 应用需覆盖静态资源与全部 `/api` 路径，否则静态资源不会被保护。
+
+`npm run deploy` 先完整 check 再部署。
+
+### 身份迁移：Sites → Access
+
+`users.identity` 是唯一键。Sites 入口写入 `sites:<openai-user-id>`，Access 入口推导 `<issuer>:<sub>`。两者不同，若直接以 Access 身份登录会插入第二条 users 记录，使历史 sessions、attempts、review_states、annotations 全部孤立。
+
+`IDENTITY_ALIASES` 把**已通过签名与邮箱校验**的 email 固定到既有 identity，从而复用原 `users.id`。格式为逗号分隔的 `email=identity`：
+
+```
+IDENTITY_ALIASES="owner@example.com=sites:XXXXXXXXXXXXXXXX"
+```
+
+该值必须来自既有生产数据（`select identity from users`），不得猜测。它是纯配置、不改数据库：移除该 secret 即回到未映射状态，原 users 行与其历史始终不变。未配置时行为与之前完全一致。若生产 `users` 表为空，则无需任何映射。
 
 ## 备份与恢复
 

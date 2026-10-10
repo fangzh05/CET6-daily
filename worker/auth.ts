@@ -3,11 +3,32 @@ export type Env = {
   DATABASE_URL?: string; APP_ENV: string; LOCAL_DEV_AUTH?: string; DEV_EMAIL?: string;
   DEVELOPMENT_DATABASE_HOST?: string; ACCESS_ISSUER?: string; ACCESS_AUDIENCE?: string;
   ALLOWED_EMAILS?: string; ALLOWED_HOSTS?: string; ASSETS: Fetcher;
+  IDENTITY_ALIASES?: string;
 };
 export type Identity = { identity: string; email: string };
 export class ApiError extends Error { constructor(public status: number, public code: string) { super(code); } }
 const keys = new Map<string, JWTVerifyGetKey>();
 const list = (value?: string) => (value ?? '').split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
+// Identity migration support. A user's rows are keyed by the single unique
+// column `users.identity`. The Sites deployment used `sites:<openai-id>`;
+// standalone Access derives `<issuer>:<sub>`. Signing in with the new value
+// would insert a second users row and orphan every session, attempt,
+// review_state and annotation of the original user.
+// IDENTITY_ALIASES pins a verified email to the pre-existing identity so the
+// same users.id is resolved. Format: "email=identity,email=identity".
+// Entries are only honoured after the Access JWT (issuer, audience, RS256
+// signature, exp and email allowlist) has already been verified.
+export function parseIdentityAliases(value?: string): Map<string, string> {
+  const map = new Map<string, string>();
+  for (const entry of (value ?? '').split(',').map(s => s.trim()).filter(Boolean)) {
+    const separator = entry.indexOf('=');
+    if (separator <= 0) continue;
+    const email = entry.slice(0, separator).trim().toLowerCase();
+    const identity = entry.slice(separator + 1).trim();
+    if (email && identity) map.set(email, identity);
+  }
+  return map;
+}
 export async function authenticate(request: Request, env: Env, keyOverride?: JWTVerifyGetKey): Promise<Identity> {
   const url = new URL(request.url);
   const local = ['localhost', '127.0.0.1', '[::1]'].includes(url.hostname);
@@ -25,7 +46,10 @@ export async function authenticate(request: Request, env: Env, keyOverride?: JWT
     const { payload } = await jwtVerify(token, jwks, { issuer: env.ACCESS_ISSUER, audience: env.ACCESS_AUDIENCE, algorithms: ['RS256'], requiredClaims: ['sub', 'exp', 'iat', 'email'], clockTolerance: 5 });
     if (!payload.sub || typeof payload.email !== 'string') throw new Error('claims');
     if (!list(env.ALLOWED_EMAILS).includes(payload.email.toLowerCase())) throw new ApiError(403, 'EMAIL_NOT_ALLOWED');
-    return { identity: `${env.ACCESS_ISSUER}:${payload.sub}`, email: payload.email.toLowerCase() };
+    const email = payload.email.toLowerCase();
+    // Preserve the original users.id when this email was already migrated.
+    const canonical = parseIdentityAliases(env.IDENTITY_ALIASES).get(email);
+    return { identity: canonical ?? `${env.ACCESS_ISSUER}:${payload.sub}`, email };
   } catch (error) { if (error instanceof ApiError) throw error; throw new ApiError(401, 'INVALID_ACCESS_TOKEN'); }
 }
 export function checkOrigin(request: Request): void {

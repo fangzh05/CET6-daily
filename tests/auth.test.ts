@@ -1,6 +1,6 @@
 import { beforeAll, describe, it, expect } from 'vitest';
 import { SignJWT, generateKeyPair, exportJWK, createLocalJWKSet } from 'jose';
-import { authenticate, type Env } from '../worker/auth';
+import { authenticate, parseIdentityAliases, type Env } from '../worker/auth';
 import { database } from '../worker/db';
 import { developmentGuard } from '../scripts/db-guard';
 describe('Access JWT and production isolation',()=>{
@@ -20,6 +20,21 @@ describe('Access JWT and production isolation',()=>{
     await expect(authenticate(req(undefined,'http://localhost'),{...env,LOCAL_DEV_AUTH:'true'})).rejects.toThrow('AUTH_CONFIGURATION_INVALID');
     await expect(authenticate(req(undefined,'https://cet6.workers.dev'),env)).rejects.toThrow('HOST_NOT_ALLOWED');
     expect((await authenticate(req(undefined,'http://localhost'),{...env,APP_ENV:'development',LOCAL_DEV_AUTH:'true'})).identity).toBe('local-development:primary');
+  });
+  it('preserves the original users.id when Sites identities migrate to Access',async()=>{
+    // The canonical identity must be resolved from the alias map, otherwise the
+    // new Access identity inserts a second users row and orphans prior history.
+    const migrated={...env,IDENTITY_ALIASES:'owner@example.com=sites:legacy-openai-id'};
+    expect((await authenticate(req(await token()),migrated,resolver)).identity).toBe('sites:legacy-openai-id');
+    // With no alias the derivable Access identity is used unchanged.
+    expect((await authenticate(req(await token()),env,resolver)).identity).toBe('https://test.cloudflareaccess.com:stable-subject');
+    // An alias is only reachable for an allowlisted, signature-verified email.
+    const both={...migrated,ALLOWED_EMAILS:'owner@example.com,other@example.com'};
+    expect((await authenticate(req(await token({email:'other@example.com'})),both,resolver)).identity).toBe('https://test.cloudflareaccess.com:stable-subject');
+    await expect(authenticate(req(await token({email:'stranger@example.com'})),migrated,resolver)).rejects.toThrow('EMAIL_NOT_ALLOWED');
+    // Malformed entries are ignored instead of failing the request.
+    expect((await authenticate(req(await token()),{...env,IDENTITY_ALIASES:'=x,owner@example.com=,nonsense'},resolver)).identity).toBe('https://test.cloudflareaccess.com:stable-subject');
+    expect(parseIdentityAliases('A@Example.com=sites:1, b@example.com = https://t.cloudflareaccess.com:2 ')).toEqual(new Map([['a@example.com','sites:1'],['b@example.com','https://t.cloudflareaccess.com:2']]));
   });
   it('refuses mismatched development endpoints and unmarked production migrations',()=>{
     expect(()=>database({...env,APP_ENV:'development',DATABASE_URL:'postgresql://u:p@ep-production.aws.neon.tech/db',DEVELOPMENT_DATABASE_HOST:'ep-dev.aws.neon.tech'})).toThrow('DEVELOPMENT_DATABASE_MISMATCH');
