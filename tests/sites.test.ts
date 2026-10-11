@@ -11,6 +11,6 @@ describe('isolated Sites entry point',()=>{
     await expect(sitesIdentity(request(),{...env,LOCAL_DEV_AUTH:'true'})).rejects.toThrow('AUTH_CONFIGURATION_INVALID');
   });
   it('standalone Access entry never accepts Sites headers',async()=>{
-    await expect(authenticate(request(),{...env,ACCESS_ISSUER:'https://owner.cloudflareaccess.com',ACCESS_AUDIENCE:'a',ALLOWED_EMAILS:'owner@example.com'})).rejects.toThrow('AUTH_REQUIRED');
+    await expect(authenticate(request(),{...env,ACCESS_ISSUER:'https://owner.cloudflareaccess.com',ACCESS_AUDIENCE:'a',ADMIN_EMAILS:'owner@example.com'})).rejects.toThrow('AUTH_REQUIRED');
   });
 });

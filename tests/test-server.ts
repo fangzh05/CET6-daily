@@ -9,7 +9,9 @@ const data=await testDatabase();
 if(process.env.KY1_BANK_PATH){const bank=await validateKy1Bank(process.env.KY1_BANK_PATH);if(bank.errors.length)throw new Error('KY1 preview validation failed');for(const group of bank.groups)await importFixture(data.db,group);}
 for(const kind of ['careful','matching','cloze'] as const)await importFixture(data.db,fixture(kind,kind));
 const preview=fixture('careful','preview');preview.paper.year=2024;preview.title='待核验测试文章 · 非六级真题';preview.release_status='pending';preview.content_status='incomplete';preview.question_status='incomplete';await importFixture(data.db,preview);
-const app=createApp({db:data.db,authenticate:async()=>({identity:'isolated-e2e-user',email:'e2e@example.invalid'})});
+// Test-only header overrides let one browser context act as different verified
+// emails (activation, admin console). Production identities come from Access.
+const app=createApp({db:data.db,authenticate:async req=>({identity:req.headers.get('x-test-user')?`test:${req.headers.get('x-test-user')}`:'isolated-e2e-user',email:(req.headers.get('x-test-email')??'e2e@example.invalid').toLowerCase()})});
 const server=createServer(async(req,res)=>{
   const chunks:Buffer[]=[];for await(const c of req)chunks.push(Buffer.from(c));
   const body=Buffer.concat(chunks);const url=`http://${req.headers.host}${req.url}`;
@@ -21,7 +23,7 @@ const server=createServer(async(req,res)=>{
     }
     const headers=new Headers();for(const [key,value] of Object.entries(req.headers))if(value)headers.set(key,Array.isArray(value)?value.join(','):value);
     const request=new Request(url,{method:req.method,headers,...(body.length?{body}: {})});
-    const response=await app.fetch(request,{APP_ENV:'development'} as Env);
+    const response=await app.fetch(request,{APP_ENV:'development',ADMIN_EMAILS:'e2e@example.invalid,owner@example.com'} as Env);
     res.writeHead(response.status,Object.fromEntries(response.headers.entries()));res.end(Buffer.from(await response.arrayBuffer()));
   } catch {res.writeHead(500);res.end('test server error');}
 });

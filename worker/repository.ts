@@ -3,11 +3,34 @@ import type { Database } from './db';
 import { ApiError, type Identity } from './auth';
 import type { Session, Result, Stats, GroupSummary, Choice } from '../shared/contracts';
 
+export type Account = { id: string; email: string; status: 'active' | 'disabled' };
+export type AdminUserRow = { id: string; email: string; status: string; created_at: string; attempts: number; sessions: number; last_active: string | null };
+export type AdminInviteRow = { id: string; code: string; note: string | null; max_uses: number; used_count: number; expires_at: string | null; revoked_at: string | null; created_at: string; created_by: string; redemptions: { email: string; redeemed_at: string }[] };
+export type AdminTotals = { users: number; active: number; disabled: number; attempts: number; active_invites: number };
+
 export class Repository {
   constructor(private db: Database) {}
-  async user(identity: Identity) {
-    const [u] = await this.db.query<{ id: string; email: string }>(sql`insert into users(identity,email) values(${identity.identity},${identity.email}) on conflict(identity) do update set email=excluded.email returning id,email`);
-    return u;
+  // Read-only account lookup. Multi-user access never auto-creates a row for a
+  // regular visitor: only provisionAdmin (configured administrators) and
+  // cet6_redeem_invite (a usable invite code) can create users.
+  async account(identity: Identity): Promise<Account | null> {
+    const [row] = await this.db.query<Account>(sql`select id,email,status from users where identity=${identity.identity}`);
+    return row ?? null;
+  }
+  async provisionAdmin(identity: Identity): Promise<Account> {
+    const [row] = await this.db.query<Account>(sql`insert into users(identity,email) values(${identity.identity},${identity.email}) on conflict(identity) do update set email=excluded.email returning id,email,status`);
+    return row;
+  }
+  // Test and local tooling only. Request handlers must never call this: real
+  // accounts are created exclusively by cet6_redeem_invite (invite redemption)
+  // and provisionAdmin (configured administrators).
+  async provisionTestUser(identity: Identity) {
+    const [row] = await this.db.query<Account>(sql`insert into users(identity,email) values(${identity.identity},${identity.email}) on conflict(identity) do update set email=excluded.email returning id,email,status`);
+    return row;
+  }
+  async redeem(identity: Identity, code: string) {
+    const [row] = await this.db.query(sql`select cet6_redeem_invite(${identity.identity},${identity.email},${code}) data`);
+    return row.data as { status: 'redeemed' | 'existing'; user: { id: string; email: string; account_status: string } };
   }
   async daily(uid: string, limit = 1) {
     return this.db.query<GroupSummary & Record<string, unknown>>(sql`
@@ -173,6 +196,52 @@ export class Repository {
       returning id,created_at`);
     if (!r) throw new ApiError(400, 'ANNOTATION_CONTEXT_INVALID');
     return r;
+  }
+  // ---- Administration (owner-only; every route re-checks the configured email) ----
+  async adminOverview() {
+    const [users, totals] = await Promise.all([
+      this.db.query<AdminUserRow>(sql`
+        select u.id,u.email,u.status,u.created_at,
+          (select count(*)::int from attempts a where a.user_id=u.id) attempts,
+          (select count(*)::int from practice_sessions s where s.user_id=u.id) sessions,
+          (select max(x)::text from (select max(a.submitted_at) x from attempts a where a.user_id=u.id
+            union all select max(s.started_at) from practice_sessions s where s.user_id=u.id) t) last_active
+        from users u order by u.created_at`),
+      this.db.query<AdminTotals>(sql`
+        select (select count(*)::int from users) users,
+          (select count(*)::int from users where status='active') active,
+          (select count(*)::int from users where status='disabled') disabled,
+          (select count(*)::int from attempts) attempts,
+          (select count(*)::int from invites where revoked_at is null and used_count<max_uses and (expires_at is null or expires_at>now())) active_invites`)
+    ]);
+    return { users, totals: totals[0] };
+  }
+  async adminSetStatus(uid: string, status: 'active' | 'disabled', protectedEmails: string[] = []) {
+    const [target] = await this.db.query<{ email: string }>(sql`select email from users where id=${uid}::uuid`);
+    if (!target) throw new ApiError(404, 'USER_NOT_FOUND');
+    // Configured administrators can never be disabled from the UI; the owner
+    // must not be able to lock themselves (or a co-admin) out by accident.
+    if (status === 'disabled' && protectedEmails.includes(target.email.toLowerCase())) throw new ApiError(403, 'ADMIN_PROTECTED');
+    const [row] = await this.db.query(sql`update users set status=${status} where id=${uid}::uuid returning id,email,status`);
+    return row;
+  }
+  async adminInvites() {
+    return this.db.query<AdminInviteRow>(sql`
+      select i.id,i.code,i.note,i.max_uses,i.used_count,i.expires_at,i.revoked_at,i.created_at,u.email created_by,
+        (select coalesce(jsonb_agg(jsonb_build_object('email',r.email,'redeemed_at',ir.redeemed_at) order by ir.redeemed_at),'[]'::jsonb)
+          from invite_redemptions ir join users r on r.id=ir.user_id where ir.invite_id=i.id) redemptions
+      from invites i join users u on u.id=i.created_by order by i.created_at desc limit 200`);
+  }
+  async adminCreateInvite(createdBy: string, code: string, maxUses: number, expiresAt: string | null, note: string | null) {
+    const [row] = await this.db.query<AdminInviteRow>(sql`
+      insert into invites(code,note,created_by,max_uses,expires_at) values(${code},${note},${createdBy}::uuid,${maxUses},${expiresAt}::timestamptz)
+      returning id,code,note,max_uses,used_count,expires_at,revoked_at,created_at`);
+    return row;
+  }
+  async adminRevokeInvite(uid: string, id: string) {
+    const [row] = await this.db.query(sql`update invites set revoked_at=now() where id=${id}::uuid and revoked_at is null and created_by=${uid}::uuid returning id,revoked_at`);
+    if (!row) throw new ApiError(404, 'INVITE_NOT_FOUND');
+    return row;
   }
 }
 

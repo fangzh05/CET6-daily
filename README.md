@@ -12,6 +12,8 @@
 
 生产部署选择已调整为 **Sites 私有托管 + ChatGPT 身份**；独立 Wrangler 部署保留 Cloudflare Access。Neon 专用项目和 production/development 分支已建立，真实 HTTP 连接、双环境迁移、重复迁移和事务故障回滚已通过。线上已登录首页确认从 Neon 读取真实空状态；跨设备练习仍待已核验题组开放后验收。
 
+**多用户（invite-only）**：Cloudflare Access 只证明邮箱归属，应用层决定账号。`ADMIN_EMAILS` 中的管理员首访自动建档并可在应用内「管理」页签发邀请码（`CET6-XXXX-XXXX-XXXX`，可设次数与有效期、可撤销）；其他邮箱在激活页兑换邀请码后获得完全独立的学习数据。接口层对未激活（`INVITE_REQUIRED`）、已停用（`ACCOUNT_DISABLED`）分别拒绝，所有业务查询继续按 `user_id` 隔离。详见 [部署指南](docs/deployment.md)。
+
 ## 安装与本地运行
 
 需要 Node.js 22+，`npm ci`。

@@ -7,7 +7,7 @@ beforeAll(async()=>{data=await testDatabase();});
 afterAll(async()=>{await data.pg.close();});
 it('supplements missing old-session explanations only when frozen content and grading match',async()=>{
   const bank=fixture('careful','supplement');const missing={...bank,explanations:[]};await importFixture(data.db,missing);
-  const repo=new Repository(data.db);const user=await repo.user({identity:'test:supplement',email:'test@example.invalid'});
+  const repo=new Repository(data.db);const user=await repo.provisionTestUser({identity:'test:supplement',email:'test@example.invalid'});
   const session=await repo.start(user.id,bank.id,'new');
   await expect(repo.result(user.id,session.id)).rejects.toThrow('RESULT_NOT_SUBMITTED');
   await repo.submit(user.id,session.id,crypto.randomUUID(),session.revision);
@@ -16,7 +16,7 @@ it('supplements missing old-session explanations only when frozen content and gr
   expect((await repo.result(user.id,session.id)).attempts.every(a=>!a.explanation)).toBe(true);
   await importFixture(data.db,bank);
   expect((await repo.result(user.id,session.id)).attempts[0].explanation?.explanation).toBe(bank.explanations[0].explanation);
-  await expect(repo.result((await repo.user({identity:'other',email:'other@example.invalid'})).id,session.id)).rejects.toThrow('SESSION_NOT_FOUND');
+  await expect(repo.result((await repo.provisionTestUser({identity:'other',email:'other@example.invalid'})).id,session.id)).rejects.toThrow('SESSION_NOT_FOUND');
   const qid=bank.questions[0].id;
   for(const change of [
     "update explanations set verification_status='pending' where question_id=$1",

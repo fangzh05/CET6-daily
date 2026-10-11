@@ -2,13 +2,18 @@ import { createRemoteJWKSet, jwtVerify, type JWTVerifyGetKey } from 'jose';
 export type Env = {
   DATABASE_URL?: string; APP_ENV: string; LOCAL_DEV_AUTH?: string; DEV_EMAIL?: string;
   DEVELOPMENT_DATABASE_HOST?: string; ACCESS_ISSUER?: string; ACCESS_AUDIENCE?: string;
-  ALLOWED_EMAILS?: string; ALLOWED_HOSTS?: string; ASSETS: Fetcher;
+  ADMIN_EMAILS?: string; ALLOWED_EMAILS?: string; ALLOWED_HOSTS?: string; ASSETS: Fetcher;
   IDENTITY_ALIASES?: string;
 };
 export type Identity = { identity: string; email: string };
 export class ApiError extends Error { constructor(public status: number, public code: string) { super(code); } }
 const keys = new Map<string, JWTVerifyGetKey>();
 const list = (value?: string) => (value ?? '').split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
+// Administrators come from server configuration only, never from client input.
+// ADMIN_EMAILS is the current name; ALLOWED_EMAILS is honoured as the legacy
+// single-owner name so an older deployment keeps working unchanged.
+export function adminEmails(env: Env): string[] { return list(env.ADMIN_EMAILS ?? env.ALLOWED_EMAILS); }
+export function isAdminEmail(env: Env, email: string): boolean { return adminEmails(env).includes(email.trim().toLowerCase()); }
 // Identity migration support. A user's rows are keyed by the single unique
 // column `users.identity`. The Sites deployment used `sites:<openai-id>`;
 // standalone Access derives `<issuer>:<sub>`. Signing in with the new value
@@ -37,7 +42,7 @@ export async function authenticate(request: Request, env: Env, keyOverride?: JWT
   }
   if (env.APP_ENV !== 'production' || env.LOCAL_DEV_AUTH === 'true') throw new ApiError(403, 'AUTH_CONFIGURATION_INVALID');
   if (!list(env.ALLOWED_HOSTS).includes(url.hostname.toLowerCase())) throw new ApiError(403, 'HOST_NOT_ALLOWED');
-  if (!env.ACCESS_ISSUER || !/^https:\/\/[a-z0-9-]+\.cloudflareaccess\.com$/.test(env.ACCESS_ISSUER) || !env.ACCESS_AUDIENCE || !list(env.ALLOWED_EMAILS).length) throw new ApiError(503, 'ACCESS_NOT_CONFIGURED');
+  if (!env.ACCESS_ISSUER || !/^https:\/\/[a-z0-9-]+\.cloudflareaccess\.com$/.test(env.ACCESS_ISSUER) || !env.ACCESS_AUDIENCE || !adminEmails(env).length) throw new ApiError(503, 'ACCESS_NOT_CONFIGURED');
   const token = request.headers.get('Cf-Access-Jwt-Assertion');
   if (!token) throw new ApiError(401, 'AUTH_REQUIRED');
   let jwks = keyOverride ?? keys.get(env.ACCESS_ISSUER);
@@ -45,7 +50,10 @@ export async function authenticate(request: Request, env: Env, keyOverride?: JWT
   try {
     const { payload } = await jwtVerify(token, jwks, { issuer: env.ACCESS_ISSUER, audience: env.ACCESS_AUDIENCE, algorithms: ['RS256'], requiredClaims: ['sub', 'exp', 'iat', 'email'], clockTolerance: 5 });
     if (!payload.sub || typeof payload.email !== 'string') throw new Error('claims');
-    if (!list(env.ALLOWED_EMAILS).includes(payload.email.toLowerCase())) throw new ApiError(403, 'EMAIL_NOT_ALLOWED');
+    // Every Access-verified email can reach the application layer. Whether an
+    // account exists (and whether it may read data) is decided in the routes:
+    // administrators are provisioned from configuration, everyone else must
+    // redeem an invite before any account is created.
     const email = payload.email.toLowerCase();
     // Preserve the original users.id when this email was already migrated.
     const canonical = parseIdentityAliases(env.IDENTITY_ALIASES).get(email);

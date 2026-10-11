@@ -102,6 +102,27 @@ BEGIN
   RETURN jsonb_build_object('session_id',sid,'score',n,'total',jsonb_array_length(s.question_ids));
 END $$;
 
+-- Multi-user activation. One statement/transaction: the invite row is locked,
+-- so a code is consumed exactly once even under concurrent redemption, and a
+-- non-admin users row can only be created by redeeming a usable code.
+CREATE OR REPLACE FUNCTION cet6_redeem_invite(p_identity text, p_email text, p_code text) RETURNS jsonb LANGUAGE plpgsql AS $$
+DECLARE u users; inv invites;
+BEGIN
+  SELECT * INTO u FROM users WHERE identity=p_identity;
+  IF FOUND THEN RETURN jsonb_build_object('status','existing','user',jsonb_build_object('id',u.id,'email',u.email,'account_status',u.status)); END IF;
+  IF EXISTS(SELECT 1 FROM users WHERE lower(email)=lower(p_email)) THEN RAISE EXCEPTION 'EMAIL_ALREADY_REGISTERED'; END IF;
+  SELECT * INTO inv FROM invites WHERE code=p_code FOR UPDATE;
+  IF NOT FOUND THEN RAISE EXCEPTION 'INVITE_INVALID'; END IF;
+  IF inv.revoked_at IS NOT NULL THEN RAISE EXCEPTION 'INVITE_REVOKED'; END IF;
+  IF inv.expires_at IS NOT NULL AND inv.expires_at<=now() THEN RAISE EXCEPTION 'INVITE_EXPIRED'; END IF;
+  IF inv.used_count>=inv.max_uses THEN RAISE EXCEPTION 'INVITE_EXHAUSTED'; END IF;
+  INSERT INTO users(identity,email) VALUES(p_identity,p_email) ON CONFLICT(identity) DO NOTHING RETURNING * INTO u;
+  IF NOT FOUND THEN SELECT * INTO u FROM users WHERE identity=p_identity; RETURN jsonb_build_object('status','existing','user',jsonb_build_object('id',u.id,'email',u.email,'account_status',u.status)); END IF;
+  INSERT INTO invite_redemptions(invite_id,user_id) VALUES(inv.id,u.id);
+  UPDATE invites SET used_count=used_count+1 WHERE id=inv.id;
+  RETURN jsonb_build_object('status','redeemed','user',jsonb_build_object('id',u.id,'email',u.email,'account_status',u.status));
+END $$;
+
 -- Enforce append-only attempt history and immutable session content/first results.
 CREATE OR REPLACE FUNCTION cet6_attempt_immutable() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'ATTEMPT_HISTORY_IMMUTABLE'; END $$;
 CREATE TRIGGER attempts_immutable BEFORE UPDATE OR DELETE ON attempts FOR EACH ROW EXECUTE FUNCTION cet6_attempt_immutable();

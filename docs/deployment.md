@@ -27,7 +27,7 @@ Sites 专用入口必须只在该 dispatcher 后运行。身份 header 的安全
 
 自有域名 `zehaoo.top` 已托管于 Cloudflare（zone `170f612abe27b88962aa0a957b7310db`，NS 已由 Spaceship 切至 `devin/gemma.ns.cloudflare.com`）。CET6 Daily 使用独立子域，先在 `cet6-test.zehaoo.top` 验收，通过后再启用 `cet6.zehaoo.top`（wrangler.jsonc 的 routes 已按此顺序分阶段书写）。同一 zone 下的其他项目不受影响：路由是精确主机名，不覆盖通配符。
 
-设置 secret DATABASE_URL；设置 `ACCESS_ISSUER=https://TEAM.cloudflareaccess.com`、`ACCESS_AUDIENCE`、`ALLOWED_EMAILS`、`ALLOWED_HOSTS`。Worker 校验 RS256 签名、issuer、audience、exp、iat、sub 和 email。所有静态请求也运行 Worker 验证，API 默认 private,no-store。禁止浏览器数据库直连或生产 LOCAL_DEV_AUTH。
+设置 secret DATABASE_URL；设置 `ACCESS_ISSUER=https://TEAM.cloudflareaccess.com`、`ACCESS_AUDIENCE`、`ADMIN_EMAILS`（管理员邮箱，历史名称为 `ALLOWED_EMAILS`，仍兼容）、`ALLOWED_HOSTS`。Worker 校验 RS256 签名、issuer、audience、exp、iat、sub 和 email。所有静态请求也运行 Worker 验证，API 默认 private,no-store。禁止浏览器数据库直连或生产 LOCAL_DEV_AUTH。
 
 `ALLOWED_HOSTS` 必须逐字列出实际使用的主机；未列入的 Host 直接 403 HOST_NOT_ALLOWED。Access 应用需覆盖静态资源与全部 `/api` 路径，否则静态资源不会被保护。
 
@@ -44,6 +44,35 @@ IDENTITY_ALIASES="owner@example.com=sites:XXXXXXXXXXXXXXXX"
 ```
 
 该值必须来自既有生产数据（`select identity from users`），不得猜测。它是纯配置、不改数据库：移除该 secret 即回到未映射状态，原 users 行与其历史始终不变。未配置时行为与之前完全一致。若生产 `users` 表为空，则无需任何映射。
+
+## 多用户与邀请码（invite-only）
+
+账号准入分两层。**Cloudflare Access 只负责证明邮箱归属**：应用策略允许任意邮箱使用 One-time PIN 登录（`Everyone` + Allow）。**应用层决定谁拥有账号**，只有两类身份能获得 `users` 行：
+
+1. **管理员**：`ADMIN_EMAILS` 中列出的邮箱，首次请求由 Worker 自动建档（`provisionAdmin`）。管理员是纯配置，不存数据库、不可被停用（接口返回 `ADMIN_PROTECTED`）。
+2. **受邀用户**：任何其他邮箱登录后只能看到激活页。必须在 `/api/access/redeem` 提交邀请码，由 SQL 函数 `cet6_redeem_invite` 在一个事务内校验并建档（行锁保证并发下不重复消费）。
+
+未建档或已停用的身份访问其他所有 `/api/*` 路由返回 `403 INVITE_REQUIRED` / `ACCOUNT_DISABLED`，静态资源不受影响但读取不到任何数据；`/api/me` 与 `/api/access/redeem` 是仅有的两个例外。
+
+邀请码由管理员在应用内「管理」页签发：`CET6-XXXX-XXXX-XXXX` 形式，12 位随机字符（32 字符无歧义字母表，约 60 bit），可选可用次数（1–50）与有效期（7/30 天或长期），可随时撤销。码在库中以去分隔符的大写形式存储（`invites.code`），前端输入时自动归一化。兑换记录写入 `invite_redemptions`，管理台显示每个码的兑换人。
+
+运维要点：
+
+- **切换既有单用户为多用户时**，Access 应用的策略从「仅 owner 邮箱」改为「Allow + Everyone（One-time PIN）」。这一步改变了安全边界：任何人都能通过邮箱验证到达激活页，但**没有邀请码就拿不到任何数据**。若不希望开放这一步，保持邮箱白名单策略即可（等价于只有名单内的人能登录）。
+- 每个通过 Access 验证的邮箱都计入免费版 50 用户额度（含只停在激活页的人），必要时在 Zero Trust 中清理。
+- `users.status`（`active`/`disabled`）由管理台切换；停用立即生效（每个请求重新校验），数据保留。
+- 邀请码是 bearer 凭证，等同口令：不要在公开渠道张贴超过所需范围的码；泄露后立即在管理台撤销。
+- 回滚：删除 `ADMIN_EMAILS` 并不能恢复旧行为，需同时把 Access 策略改回单邮箱 allow 并重新部署上一个版本；数据库新增列与表**不删除**，旧代码会忽略它们（`users.status` 有默认值 `active`）。
+
+### 多用户表结构（Migration 0005）
+
+```sql
+users.status text not null default 'active' check (status in ('active','disabled'))
+invites(id, code unique, note, created_by → users, max_uses 1..50, used_count, expires_at, revoked_at, created_at)
+invite_redemptions(invite_id, user_id, redeemed_at)  -- 主键 (invite_id,user_id)
+```
+
+`cet6_redeem_invite(identity, email, code)` 的失败码直接映射 HTTP 状态：`INVITE_INVALID`/`INVITE_EXPIRED`/`INVITE_REVOKED` 400、`INVITE_EXHAUSTED`/`EMAIL_ALREADY_REGISTERED` 409。已建档身份重复提交任意码是幂等的（返回自己的账号，不消耗码）。
 
 ## 备份与恢复
 

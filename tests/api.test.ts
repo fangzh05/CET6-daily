@@ -7,7 +7,7 @@ import type { Env } from '../worker/auth';
 import type { Session, Result, Stats } from '../shared/contracts';
 describe('Worker API + real PostgreSQL execution (isolated PGlite test engine)',()=>{
   let data:Awaited<ReturnType<typeof testDatabase>>; let app:ReturnType<typeof createApp>;
-  const env={APP_ENV:'development'} as Env;
+  const env={APP_ENV:'development',ADMIN_EMAILS:'test@example.invalid'} as Env;
   const request=async(path:string,method='GET',body?:unknown,user='alice')=>app.request(`http://localhost/api${path}`,{method,headers:{Origin:'http://localhost','Content-Type':'application/json','x-test-user':user},body:body===undefined?undefined:JSON.stringify(body)},env);
   const json=async<T>(path:string,method='GET',body?:unknown,user='alice'):Promise<T>=>{const r=await request(path,method,body,user);expect(r.status,await r.clone().text()).toBeLessThan(300);return r.json() as Promise<T>;};
   beforeAll(async()=>{data=await testDatabase();for(const kind of ['careful','matching','cloze'] as const)await importFixture(data.db,fixture(kind,kind));app=createApp({db:data.db,authenticate:async req=>({identity:`test:${req.headers.get('x-test-user')??'alice'}`,email:'test@example.invalid'})});});

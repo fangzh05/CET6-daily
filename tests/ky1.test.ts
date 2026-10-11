@@ -11,7 +11,7 @@ it.skipIf(!present)('validates and imports all real KY1 data, grades objective q
   const bank=await validateKy1Bank(root);expect(bank.errors).toEqual([]);expect(bank.coverage.source_questions).toBe(884);expect(bank.coverage.source_verified_answers).toBe(765);expect(bank.coverage.analysis_blocks).toBe(3163);expect(bank.groups).toHaveLength(153);expect(bank.groups.filter(isEligible)).toHaveLength(102);
   const data=await testDatabase();try{
     for(const group of bank.groups)await importFixture(data.db,group);
-    const repo=new Repository(data.db);const user=await repo.user({identity:'ky1-test',email:'ky1@example.invalid'});
+    const repo=new Repository(data.db);const user=await repo.provisionTestUser({identity:'ky1-test',email:'ky1@example.invalid'});
     const library=await repo.library();expect(library.filter(g=>g.exam==='KY1')).toHaveLength(153);
     const objective=bank.groups.find(g=>g.id==='ky1-2024-cloze-a-01')!;
     const session=await repo.start(user.id,objective.id,'new');expect(JSON.stringify(session)).not.toContain('correct_answer');expect(JSON.stringify(session)).not.toContain('analysis');

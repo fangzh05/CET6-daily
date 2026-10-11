@@ -11,7 +11,20 @@ export const questions = pgTable('questions', { id: text().primaryKey(), groupId
 export const answerKeys = pgTable('answer_keys', { questionId: text('question_id').primaryKey().references(() => questions.id, { onDelete: 'restrict' }), correctAnswer: text('correct_answer').notNull(), source: text().notNull(), verificationStatus: text('verification_status').notNull(), verifiedAt: time('verified_at'), answerVersion: text('answer_version').notNull() }, t => [check('verified_answer_timestamp', sql`${t.verificationStatus} <> 'verified' or ${t.verifiedAt} is not null`)]);
 export const explanations = pgTable('explanations', { questionId: text('question_id').primaryKey().references(() => questions.id, { onDelete: 'restrict' }), explanation: text().notNull(), keywordRelation: text('keyword_relation').notNull(), evidence: jsonb().notNull(), distractors: jsonb().notNull(), skillTags: jsonb('skill_tags').notNull(), analysis: jsonb().notNull().default({}), verificationStatus: text('verification_status').notNull() });
 export const sourceReferences = pgTable('source_references', { groupId: text('group_id').primaryKey().references(() => questionGroups.id, { onDelete: 'restrict' }), repository: text().notNull(), path: text().notNull(), commit: text().notNull(), hash: text().notNull(), metadata: jsonb().notNull().default({}), batchId: uuid('batch_id').notNull().references(() => importBatches.id, { onDelete: 'restrict' }) });
-export const users = pgTable('users', { id: uuid().defaultRandom().primaryKey(), identity: text().notNull().unique(), email: text().notNull(), createdAt: time('created_at').defaultNow().notNull() });
+export const users = pgTable('users', { id: uuid().defaultRandom().primaryKey(), identity: text().notNull().unique(), email: text().notNull(), status: text().notNull().default('active'), createdAt: time('created_at').defaultNow().notNull() }, t => [check('user_account_status', sql`${t.status} in ('active','disabled')`)]);
+// Multi-user access is invite-only: a users row for a non-admin identity exists
+// only after a usable, unexpired invite code has been redeemed for that email.
+export const invites = pgTable('invites', {
+  id: uuid().defaultRandom().primaryKey(), code: text().notNull().unique(), note: text(),
+  createdBy: uuid('created_by').notNull().references(() => users.id, { onDelete: 'restrict' }),
+  maxUses: integer('max_uses').notNull().default(1), usedCount: integer('used_count').notNull().default(0),
+  expiresAt: time('expires_at'), revokedAt: time('revoked_at'), createdAt: time('created_at').defaultNow().notNull()
+}, t => [check('invite_max_uses', sql`${t.maxUses} between 1 and 50`), check('invite_used_bounds', sql`${t.usedCount} >= 0 and ${t.usedCount} <= ${t.maxUses}`)]);
+export const inviteRedemptions = pgTable('invite_redemptions', {
+  inviteId: uuid('invite_id').notNull().references(() => invites.id, { onDelete: 'restrict' }),
+  userId: uuid('user_id').notNull().references(() => users.id, { onDelete: 'restrict' }),
+  redeemedAt: time('redeemed_at').defaultNow().notNull()
+}, t => [primaryKey({ columns: [t.inviteId, t.userId] })]);
 export const userSettings = pgTable('user_settings', { userId: uuid('user_id').primaryKey().references(() => users.id, { onDelete: 'cascade' }), dailyGoal: integer('daily_goal').notNull().default(5) }, t => [check('daily_goal_bounds', sql`${t.dailyGoal} between 1 and 50`)]);
 export const practiceSessions = pgTable('practice_sessions', {
   id: uuid().defaultRandom().primaryKey(), userId: uuid('user_id').notNull().references(() => users.id, { onDelete: 'restrict' }),

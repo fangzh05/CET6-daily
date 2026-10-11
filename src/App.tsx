@@ -1,9 +1,11 @@
 import { lazy, Suspense, useEffect, useState } from 'react';
-import type { Annotation, Dashboard, Session, Stats, Result } from '../shared/contracts';
+import type { Annotation, Dashboard, Me, Session, Stats, Result } from '../shared/contracts';
 import { api, friendly, RequestError } from './api';
 import { Reader } from './Reader';
 import { StatsView } from './StatsView';
 import { Library } from './Library';
+import { Admin } from './Admin';
+import { AccessGate } from './AccessGate';
 import { readTheme, saveTheme } from './theme';
 import './home.css';
 const FormalReadingSession=lazy(()=>import('./reading/FormalReading').then(m=>({default:m.FormalReadingSession})));
@@ -11,12 +13,14 @@ const kindNames={careful:'仔细阅读',matching:'匹配 / 新题型',cloze:'选
 const pct=(correct:number,count:number)=>count?`${Math.round(correct/count*100)}%`:'—';
 export function App() {
   const [theme,setTheme]=useState(readTheme);
-  const [user,setUser]=useState<{id:string;email:string}|null>(null); const [data,setData]=useState<Dashboard|null>(null);
-  const [session,setSession]=useState<Session|null>(null); const [result,setResult]=useState<Result|null>(null); const [tab,setTab]=useState<'today'|'stats'|'notes'|'library'>('today');
+  const [me,setMe]=useState<Me|null>(null); const [data,setData]=useState<Dashboard|null>(null);
+  const [session,setSession]=useState<Session|null>(null); const [result,setResult]=useState<Result|null>(null); const [tab,setTab]=useState<'today'|'stats'|'notes'|'library'|'admin'>('today');
   const [stats,setStats]=useState<Stats|null>(null); const [notes,setNotes]=useState<Annotation[]|null>(null);
   const [focusQuestion,setFocusQuestion]=useState<string|undefined>();
   const [loading,setLoading]=useState(true); const [error,setError]=useState(''); const [busy,setBusy]=useState(false);
-  const refresh=async()=>{setLoading(true);setError('');try {const u=await api<{id:string;email:string}>('/me');setUser(u);setData(await api<Dashboard>('/dashboard'));}catch(e){setError(friendly(e));}finally{setLoading(false);}};
+  // A verified email without an active account is routed to the activation
+  // screen; business endpoints are only called once the account is active.
+  const refresh=async()=>{setLoading(true);setError('');try {const next=await api<Me>('/me');setMe(next);setData(next.status==='active'?await api<Dashboard>('/dashboard'):null);}catch(e){setError(friendly(e));}finally{setLoading(false);}};
   const open=async(s:Session,questionId?:string)=>{
     setFocusQuestion(questionId);
     const r=s.status==='submitted'?await api<Result>(`/sessions/${s.id}/result`):null;
@@ -26,10 +30,11 @@ export function App() {
   const start=async(group_id:string,practice_type:'new'|'retry'|'review',question_ids?:string[])=>{setBusy(true);setError('');try{let next:Session;try{next=await api<Session>('/sessions','POST',{group_id,practice_type,...(question_ids?{question_ids}:{})});}catch(e){if(practice_type!=='new'||!(e instanceof RequestError)||e.code!=='ALREADY_PRACTICED')throw e;next=await api<Session>('/sessions','POST',{group_id,practice_type:'retry'});}await open(next);}catch(e){setError(friendly(e));}finally{setBusy(false);}};
   const leave=()=>{setTheme(readTheme());setSession(null);setResult(null);history.replaceState(null,'',location.pathname);void refresh();};
   const navigate=async(t:typeof tab)=>{setTab(t);setError('');try{if(t==='stats')setStats(await api<Stats>('/stats'));if(t==='notes')setNotes(await api('/annotations'));}catch(e){setError(friendly(e));}};
-  if(session && user && session.snapshot.kind==='careful')return <Suspense fallback={<p role="status">正在打开阅读工作区…</p>}><FormalReadingSession key={session.id} session={session} initialQuestionId={focusQuestion} uid={user.id} result={result} onLeave={leave} onRetry={()=>start(session.group_id,'retry')}/></Suspense>;
-  if(session && user) return <Reader key={session.id} initial={session} initialQuestionId={focusQuestion} uid={user.id} result={result} onLeave={leave} onSubmitted={async()=>{const r=await api<Result>(`/sessions/${session.id}/result`);setResult(r);setSession(r.session);}} onRetry={()=>start(session.group_id,'retry')}/>;
+  if(me&&me.status!=='active') return <AccessGate me={me} theme={theme} onRefresh={refresh}/>;
+  if(session && me?.id && session.snapshot.kind==='careful')return <Suspense fallback={<p role="status">正在打开阅读工作区…</p>}><FormalReadingSession key={session.id} session={session} initialQuestionId={focusQuestion} uid={me.id} result={result} onLeave={leave} onRetry={()=>start(session.group_id,'retry')}/></Suspense>;
+  if(session && me?.id) return <Reader key={session.id} initial={session} initialQuestionId={focusQuestion} uid={me.id} result={result} onLeave={leave} onSubmitted={async()=>{const r=await api<Result>(`/sessions/${session.id}/result`);setResult(r);setSession(r.session);}} onRetry={()=>start(session.group_id,'retry')}/>;
   return <div className="app-shell" data-theme={theme}>
-    <header className="topbar"><a className="brand" href="/" aria-label="CET6 Daily 首页">CET6 <span>Daily</span></a><nav aria-label="主导航">{([['today','今日'],['library','题库'],['stats','统计'],['notes','笔记']] as const).map(([key,label])=><button key={key} aria-current={tab===key?'page':undefined} onClick={()=>void navigate(key)}>{label}</button>)}</nav><div className="home-header-actions"><span className="account-label">A LITTLE FOCUS, EVERY DAY.</span><button className="home-theme" aria-label={theme==='light'?'切换深色模式':'切换浅色模式'} onClick={()=>{const next=theme==='light'?'dark':'light';saveTheme(next);setTheme(next);}}>{theme==='light'?'深色':'浅色'}</button></div></header>
+    <header className="topbar"><a className="brand" href="/" aria-label="CET6 Daily 首页">CET6 <span>Daily</span></a><nav aria-label="主导航">{([['today','今日'],['library','题库'],['stats','统计'],['notes','笔记'],...(me?.admin?[['admin','管理'] as const]:[])] as const).map(([key,label])=><button key={key} aria-current={tab===key?'page':undefined} onClick={()=>void navigate(key)}>{label}</button>)}</nav><div className="home-header-actions"><span className="account-label">A LITTLE FOCUS, EVERY DAY.</span>{me?.email&&<div className="account-menu"><span className="account-email" title={me.email}>{me.email}</span>{me.logout_url&&<a className="text-button" href={me.logout_url}>退出</a>}</div>}<button className="home-theme" aria-label={theme==='light'?'切换深色模式':'切换浅色模式'} onClick={()=>{const next=theme==='light'?'dark':'light';saveTheme(next);setTheme(next);}}>{theme==='light'?'深色':'浅色'}</button></div></header>
     <main className="dashboard">
       {error&&<div className="error" role="alert"><span>{error}</span><button onClick={()=>void refresh()}>重试</button></div>}
       {tab==='today'&&<>
@@ -48,6 +53,7 @@ export function App() {
       {tab==='library'&&<Library busy={busy} onStart={id=>void start(id,'new')}/>}
       {tab==='stats'&&(stats?<StatsView stats={stats} onOpen={async(sid,qid)=>{setError('');try{await open(await api<Session>(`/sessions/${sid}`),qid);}catch(e){setError(friendly(e));}}}/>:<div className="empty" role="status">正在读取统计…</div>)}
       {tab==='notes'&&<><h1>阅读笔记</h1><p className="muted">留下值得再读的词句。</p>{notes?.length?notes.map(n=><article className="panel note" key={n.id}><blockquote>{n.selected_text}</blockquote>{n.note&&<p>{n.note}</p>}<small>{n.title&&<>{n.title} · </>}{n.kind==='sentence'?'难句':n.note?'笔记':'高亮摘录'} · {new Date(n.created_at).toLocaleDateString('zh-CN')}</small></article>):<div className="empty panel">尚无笔记。阅读时选择原文，点击“高亮”或“写笔记”即可保存。</div>}</>}
-    </main><footer className="site-footer"><span>CET6 Daily</span><span>{user?'学习进度已同步':'登录后同步学习进度'}</span></footer>
+      {tab==='admin'&&<Admin/>}
+    </main><footer className="site-footer"><span>CET6 Daily</span><span>{me?.id?'学习进度已同步':'登录后同步学习进度'}</span></footer>
   </div>;
 }

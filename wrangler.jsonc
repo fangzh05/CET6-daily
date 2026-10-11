@@ -15,10 +15,13 @@
       // must also appear in the ALLOWED_HOSTS secret; the worker rejects any
       // request whose Host is not listed there.
       //
-      // cet6-test.zehaoo.top was retired once cet6.zehaoo.top was verified.
-      // Re-adding it requires the same three places: this route list, the
-      // ALLOWED_HOSTS secret, and the Cloudflare Access application.
+      // cet6-test.zehaoo.top MUST stay bound while the Cloudflare Access
+      // application still lists it: Access posts its post-login handshake to
+      // /cdn-cgi/access/authorized on the app's primary destination, and if that
+      // host has no route the login fails with a connection error. Retire the
+      // host from the Access application FIRST, then remove it here.
       "routes": [
+        { "pattern": "cet6-test.zehaoo.top", "custom_domain": true },
         { "pattern": "cet6.zehaoo.top", "custom_domain": true }
       ]
       // Account-specific values are secrets, never committed (this repository is
@@ -26,10 +29,14 @@
       //   npx wrangler secret put DATABASE_URL      --env production
       //   npx wrangler secret put ACCESS_ISSUER     --env production
       //   npx wrangler secret put ACCESS_AUDIENCE   --env production
-      //   npx wrangler secret put ALLOWED_EMAILS    --env production
+      //   npx wrangler secret put ADMIN_EMAILS      --env production
       //   npx wrangler secret put ALLOWED_HOSTS     --env production
       // Optional, only for data-preserving identity migration (see docs/deployment.md):
       //   npx wrangler secret put IDENTITY_ALIASES  --env production
+      // ALLOWED_EMAILS is the legacy name of ADMIN_EMAILS and is still honoured
+      // if ADMIN_EMAILS is absent. Regular accounts are invite-only: the
+      // Cloudflare Access policy may allow any verified email, while the Worker
+      // only serves data to accounts created by redeeming an invite.
     }
   }
 }

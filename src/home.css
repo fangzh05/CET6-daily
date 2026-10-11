@@ -24,3 +24,31 @@
 /* Statistics extensions reuse the current page tokens and section rhythm. */
 .stats-table-scroll{overflow-x:auto}.stats-table-scroll table{min-width:660px}.trend-kind{display:block;color:var(--muted);font-size:11px;line-height:1.7;margin-top:5px;max-width:380px}.mistake-date{display:flex;align-items:center;gap:10px;font-size:12px;color:var(--muted)}.mistake-date input{border:1px solid var(--line);background:var(--surface);color:var(--home-ink);padding:8px 10px;border-radius:6px;font:inherit;min-height:40px}.mistake-row{display:flex;align-items:center;justify-content:space-between;gap:24px;padding:22px 0;border-bottom:1px solid var(--line)}.mistake-row>div{min-width:0;flex:1}.mistake-row h3{font-family:Georgia,serif;font-weight:400;font-size:17px;line-height:1.65;margin:10px 0;overflow-wrap:anywhere}.mistake-row .secondary{flex-shrink:0}.stat-section>p.muted{font-size:12px;line-height:1.8;margin:10px 0}.stat-section>.caption{margin-top:18px}.legacy-notes{max-height:35vh;overflow:auto;padding:20px;border-bottom:1px solid var(--line);font-size:13px}.legacy-notes article{padding:12px 0}.legacy-notes blockquote{font-family:Georgia,serif;line-height:1.7}
 @media(max-width:700px){.mistake-row{display:block;padding:20px 0}.mistake-row .secondary{margin-top:12px;width:100%}.mistake-date{gap:6px;font-size:11px}.mistake-date input{max-width:155px}.stats-table-scroll table{min-width:620px}.stat-section>.section-title{gap:10px}.trend-kind{max-width:280px}}
+
+/* Multi-user: account area, activation gate and admin console reuse the home tokens. */
+.app-shell .account-menu{display:flex;align-items:center;gap:10px;max-width:230px}
+.app-shell .account-email{font-size:12px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:168px}
+.app-shell .account-menu .text-button{white-space:nowrap}
+@media(max-width:1000px){.app-shell .account-email{display:none}.app-shell .account-menu{gap:2px}}
+.app-shell .gate{max-width:560px;margin:0 auto;padding:72px 34px 60px}
+.app-shell .gate h1{font-size:34px;margin-bottom:16px;font-weight:500;letter-spacing:-1.2px}
+.app-shell .gate .muted{font-size:14px;line-height:1.9}
+.app-shell .gate-form{display:flex;gap:12px;margin:28px 0 10px;flex-wrap:wrap}
+.app-shell .gate-form input{flex:1;min-width:220px;border:1px solid var(--line);border-radius:6px;background:var(--surface);color:var(--home-ink);padding:12px 14px;font-size:14px;letter-spacing:.06em;text-transform:uppercase;min-height:44px}
+.app-shell .gate-actions{margin-top:22px;display:flex;gap:16px;align-items:center}
+.app-shell .gate-note{margin-top:18px}
+@media(max-width:599px){.app-shell .gate{padding:44px 20px 48px}.app-shell .gate h1{font-size:28px}.app-shell .gate-form input{min-width:0;width:100%}.app-shell .gate-form .primary{width:100%}}
+.app-shell .invite-form{display:flex;gap:18px;align-items:flex-end;flex-wrap:wrap;padding:16px 0 20px}
+.app-shell .invite-form label{display:flex;flex-direction:column;gap:6px;font-size:11px;color:var(--muted)}
+.app-shell .invite-form input,.app-shell .invite-form select{border:1px solid var(--line);border-radius:6px;background:var(--surface);color:var(--home-ink);padding:10px 12px;min-height:44px;font-size:13px}
+.app-shell .invite-note input{min-width:220px}
+.app-shell .latest-invite{display:flex;align-items:center;justify-content:space-between;gap:20px;background:var(--soft);border:1px solid var(--line);border-radius:6px;padding:16px 20px;margin-bottom:18px;flex-wrap:wrap}
+.app-shell .latest-invite strong{font-family:Georgia,serif;font-size:22px;letter-spacing:.08em}
+.app-shell .admin-table-scroll{overflow-x:auto}
+.app-shell .admin-table-scroll table{width:100%;border-collapse:collapse;font-size:13px;min-width:640px}
+.app-shell .admin-table-scroll th{text-align:left;font-weight:500;color:var(--muted);font-size:11px;letter-spacing:.06em;padding:10px 12px 10px 0;border-bottom:1px solid var(--line);white-space:nowrap}
+.app-shell .admin-table-scroll td{padding:12px 12px 12px 0;border-bottom:1px solid var(--line);vertical-align:top}
+.app-shell .admin-table-scroll code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12.5px;letter-spacing:.05em}
+.app-shell .badge{display:inline-block;margin-left:8px;padding:2px 7px;border-radius:999px;background:var(--soft);color:var(--green);font-size:10px}
+.app-shell .redemption{display:block;font-size:12px}
+.app-shell .redemption small{display:block;color:var(--muted);font-size:10px}

@@ -86,6 +86,14 @@ export type Annotation = { id:string; passage_id:string; paragraph_id:string; se
 export type Mistake = { session_id:string; question_id:string; number:number; stem:string; submitted_answer:string|null; correct_answer:string; submitted_at:string; practice_type:'new'|'retry'|'review'; paper:BankGroup['paper']; kind:BankGroup['kind']; title:string };
 export type MistakePage = { day:string; items:Mistake[]; total:number; offset:number };
 export const mistakeQuerySchema=z.object({day:z.iso.date(),offset:z.coerce.number().int().min(0).max(100000).default(0)}).strict();
+// Multi-user: activation and administration inputs.
+export const redeemSchema = z.object({ code: z.string().min(4).max(64) }).strict();
+export const inviteCreateSchema = z.object({ max_uses: z.number().int().min(1).max(50).default(1), expires_in_days: z.number().int().min(1).max(365).nullable().default(7), note: z.string().max(200).default('') }).strict();
+export const userStatusSchema = z.object({ status: z.enum(['active', 'disabled']) }).strict();
+export type Me = { id: string | null; email: string; status: 'active' | 'disabled' | 'invite_required'; admin: boolean; logout_url: string | null };
+export type AdminUser = { id: string; email: string; status: string; created_at: string; attempts: number; sessions: number; last_active: string | null; admin?: boolean };
+export type AdminInvite = { id: string; code: string; display_code?: string; note: string | null; max_uses: number; used_count: number; expires_at: string | null; revoked_at: string | null; created_at: string; created_by?: string; redemptions?: { email: string; redeemed_at: string }[] };
+export type AdminOverview = { users: AdminUser[]; totals: { users: number; active: number; disabled: number; attempts: number; active_invites: number } };
 export type Stats = { today_count: number; week_count: number; week_ms: number; first_count: number; first_correct: number; review_count: number; review_correct: number; average_ms: number; review_completion: { completed: number; due: number }; trend: { day: string; session_id:string; title:string; paper:BankGroup['paper']; kind:BankGroup['kind']; count: number; correct: number }[]; by_kind: { kind: BankGroup['kind']; count: number; correct: number }[]; by_year: { year: number; count: number; total: number }[]; errors: { category: string | null; count: number }[] };
 export type Dashboard = { daily_goal: number; remaining: number; recommendations: GroupSummary[]; due: { question_id: string; group_id: string; title: string; review_due_at: string }[]; active: Session[]; stats: Stats };
 export function isEligible(g: BankGroup): boolean {
