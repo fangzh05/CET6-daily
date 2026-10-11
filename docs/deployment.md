@@ -74,6 +74,17 @@ IDENTITY_ALIASES="owner@example.com=sites:XXXXXXXXXXXXXXXX"
 
 处理方式（已在本仓库生产库执行过一次）：先用本地脚本逐行核对，确认差异**仅是换行符**（`sha256(CRLF 变体) === 库中记录值`），把旧值备份到本地文件，再在单个事务里把记录更新为仓库规范字节的哈希。不要通过改写迁移文件或改写工作副本来绕过校验。
 
+### 生产 Access 配置（2026-10-12 起为多用户）
+
+| 项 | 值 |
+|---|---|
+| 应用 | `CET6 Daily`（self_hosted）`082c6420-4208-420b-880d-27c349eda5c0`，域 `cet6.zehaoo.top` + `cet6-test.zehaoo.top` |
+| 策略 | `2c59b250-8422-4170-9b06-d6f478d563db`，名称 **Any verified email (invite codes gate access)**，decision=allow，include=**Everyone**（原为「Owner only」单邮箱） |
+| 登录方式 | 账户级 IdP：`cloudflare`（SSO）+ `onetimepin`（One-time PIN，`b2d4f876-1dce-4fea-8509-24c1c6eea459`）；应用 `allowed_idps` 为空 = 两种都可用 |
+| 会话 | 24h |
+
+改动的实际含义：凡能收到邮件验证码的人都能到达**激活页**，但没有邀请码拿不到任何数据（账号由 `cet6_redeem_invite` 创建）。撤回方式：把策略 include 改回邮箱、并在 IdP 列表里停用 One-time PIN。
+
 ### 多用户表结构（Migration 0005）
 
 ```sql
