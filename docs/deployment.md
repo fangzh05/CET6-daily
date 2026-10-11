@@ -58,11 +58,21 @@ IDENTITY_ALIASES="owner@example.com=sites:XXXXXXXXXXXXXXXX"
 
 运维要点：
 
-- **切换既有单用户为多用户时**，Access 应用的策略从「仅 owner 邮箱」改为「Allow + Everyone（One-time PIN）」。这一步改变了安全边界：任何人都能通过邮箱验证到达激活页，但**没有邀请码就拿不到任何数据**。若不希望开放这一步，保持邮箱白名单策略即可（等价于只有名单内的人能登录）。
+- **切换既有单用户为多用户时**，需要在 Cloudflare Zero Trust 控制台做三处调整：
+  1. **Settings → Authentication → Login methods**：确认 **One-time PIN** 已启用（这是让任意邮箱自助登录的前提；只保留 Cloudflare 账户登录时，只有 Cloudflare 用户能进来）。
+  2. **Access → Applications → CET6 Daily → Authentication（Identity providers）**：把 **One-time PIN** 加入该应用的登录方式。
+  3. **Access → Applications → CET6 Daily → Policies**：把原来的单邮箱策略改为 Decision=Allow、Include=**Everyone**（如仍想收紧，可保留邮箱清单，此时邀请码成为第二道闸门）。
+  这一步改变了安全边界：任何人都能通过邮箱验证到达激活页，但**没有邀请码就拿不到任何数据**。
 - 每个通过 Access 验证的邮箱都计入免费版 50 用户额度（含只停在激活页的人），必要时在 Zero Trust 中清理。
 - `users.status`（`active`/`disabled`）由管理台切换；停用立即生效（每个请求重新校验），数据保留。
 - 邀请码是 bearer 凭证，等同口令：不要在公开渠道张贴超过所需范围的码；泄露后立即在管理台撤销。
 - 回滚：删除 `ADMIN_EMAILS` 并不能恢复旧行为，需同时把 Access 策略改回单邮箱 allow 并重新部署上一个版本；数据库新增列与表**不删除**，旧代码会忽略它们（`users.status` 有默认值 `active`）。
+
+### 迁移校验与换行符（Windows 工作副本）
+
+`drizzle.__drizzle_migrations` 记录的是每个迁移文件的 **sha256（精确字节）**，`.gitattributes` 因此把 `/db/migrations/*.sql` 标为 `-text`。若历史上曾在 CRLF 工作副本上执行过迁移，而仓库中保存的是 LF，`scripts/migrate.ts` 会以 `Applied migration changed` 拒绝继续。
+
+处理方式（已在本仓库生产库执行过一次）：先用本地脚本逐行核对，确认差异**仅是换行符**（`sha256(CRLF 变体) === 库中记录值`），把旧值备份到本地文件，再在单个事务里把记录更新为仓库规范字节的哈希。不要通过改写迁移文件或改写工作副本来绕过校验。
 
 ### 多用户表结构（Migration 0005）
 
