@@ -2,6 +2,10 @@ import { z } from 'zod';
 import { readTheme } from '../theme';
 export const highlightSchema=z.object({id:z.string(),paragraphId:z.string(),start:z.number().int().nonnegative(),end:z.number().int().positive()});
 export type Highlight=z.infer<typeof highlightSchema>;
+export function uniqueHighlights(highlights:Highlight[]):Highlight[]{
+  const seen=new Set<string>();
+  return highlights.filter(h=>{const key=JSON.stringify([h.paragraphId,h.start,h.end]);if(seen.has(key))return false;seen.add(key);return true;});
+}
 export const practiceSchema=z.object({version:z.literal(1),passageId:z.string(),currentQuestionId:z.string(),selectedAnswers:z.record(z.string(),z.string()),flaggedQuestionIds:z.array(z.string()),readerScrollPosition:z.number().nonnegative(),questionScrollPositions:z.record(z.string(),z.number().nonnegative()),drawerState:z.enum(['collapsed','half','full']),drawerHeight:z.number().min(0).max(1).nullable().default(null),readingHighlights:z.array(highlightSchema),practiceStatus:z.enum(['practice','review']),reviewSelection:z.number().int().nonnegative(),split:z.number().min(40).max(65),tabletView:z.enum(['passage','questions']),theme:z.enum(['light','dark']),fontSize:z.number().min(17).max(26)});
 export type PracticeState=z.infer<typeof practiceSchema>;
 export const prototypeStorageKey='cet6:prototype:reading:quiet-city-v1';

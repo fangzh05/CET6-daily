@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { Annotation, PublicGroup } from '../shared/contracts';
 import { api, friendly } from './api';
-import type { Highlight } from './reading/state';
+import { uniqueHighlights, type Highlight } from './reading/state';
 export type NoteRange={paragraphId:string;start:number;end:number};
 export function noteHighlights(notes:Annotation[],group:PublicGroup):Highlight[] {
-  return notes.flatMap(n=>{const p=group.passage.paragraphs.find(p=>p.id===n.paragraph_id);const start=p?.text.indexOf(n.selected_text)??-1;return start<0?[]:[{id:n.id,paragraphId:n.paragraph_id,start,end:start+n.selected_text.length}];});
+  return uniqueHighlights(notes.flatMap(n=>{const p=group.passage.paragraphs.find(p=>p.id===n.paragraph_id);const start=p?.text.indexOf(n.selected_text)??-1;return start<0?[]:[{id:n.id,paragraphId:n.paragraph_id,start,end:start+n.selected_text.length}];}));
 }
 export function useReadingNotes(group:PublicGroup,legacyKey?:string) {
   const [notes,setNotes]=useState<Annotation[]>([]);const [error,setError]=useState('');const [loaded,setLoaded]=useState(false);const current=useRef(notes);current.current=notes;
