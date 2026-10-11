@@ -15,9 +15,8 @@
       // must also appear in the ALLOWED_HOSTS secret; the worker rejects any
       // request whose Host is not listed there.
       "routes": [
-        { "pattern": "cet6-test.zehaoo.top", "custom_domain": true }
-        // Stage 2, enabled only after the test host is verified:
-        // , { "pattern": "cet6.zehaoo.top", "custom_domain": true }
+        { "pattern": "cet6-test.zehaoo.top", "custom_domain": true },
+        { "pattern": "cet6.zehaoo.top", "custom_domain": true }
       ]
       // Account-specific values are secrets, never committed (this repository is
       // public). Set them once per environment:
