@@ -1,13 +1,14 @@
-# Design QA — compact reading review
+# Answer workspace and annotations QA
 
-Status: PASS (2026-10-09)
+Reference: supplied KY1 mobile screenshot and existing CET6 reading workspace.
 
-Scope: preserve the existing typography, neutral surfaces, blue selection outline, and green/red review colors while giving questions more room.
+Changes: neutral backgrounds and blue selected states; single-row horizontally scrolling question numbers; compact results; mobile answer-pane height adjustment. CET6, KY1 and N1 now share the selection toolbar and note dialog. Article, question-stem and option excerpts use owned frozen-session validation.
 
-Visual comparison: `reports/compact/comparison.jpg` combines the live source and implementation at 1280×800. Reviewed side by side: the desktop summary shrinks from 203px to 91px; the navigation retains its existing style. Different question content comes from the local original practice fixture, not a production data change.
+Local checks: npm run check passed (typecheck, 43 tests, production build and Worker dry run); git diff --check passed. API regression covers exact question/option excerpts, invalid text/targets, wrong passage, missing owned context and cross-user deletion protection.
 
-The saved-score / retry row now follows question pagination inside normal scroll content on all sizes. No pinned footer remains.
+Browser checks: CET6 shared workspace, N1 vocabulary entry with Japanese text, and KY1 twenty-question cloze entry used isolated synthetic fixtures. Saved stem notes and option highlights appeared immediately and survived reload. KY1 article text after a rendered blank retained exact source offsets. Selection did not change selected answers. New excerpts did not duplicate an existing note. Mobile viewport (390 x 844) displayed a single-row navigator and independently scrolling questions.
 
-Responsive interaction checks: at 390×844, dragging stops at 57.82% workspace height; at portrait iPad 820×1180, dragging stops at 41.79%. No preset snapping. The saved fractional height survives reload. Home/End keyboard controls, collapse/expand click, evidence jump and return work. Screenshots: `reports/compact/phone-custom.jpg`, `reports/compact/ipad-custom.jpg`.
+final result: passed
+Scope: local UI and persistence on the isolated PostgreSQL fixture service. Exact production content and physical-device touch behavior remain unverified.
 
-Validation: typecheck, 33 tests, production build and Worker dry run pass; browser console has no errors. Pointer dragging was checked in Chromium device-sized viewports; physical iPhone/iPad Safari touch behavior was not tested.
+Release status: deployed on 2026-10-12. Wrangler OAuth device authorization succeeded and credentials were persisted in the local Wrangler configuration. Production migration 0007_question_annotations.sql applied atomically; before/after counts unchanged: practice_sessions 8, attempts 45, review_states 25, annotations 21. Worker version 1618b62e-fb28-420e-9cfa-b600535af5c6 published to cet6.zehaoo.top and cet6-test.zehaoo.top. Main domain returned the expected Access 302 redirect. Authenticated production interactions and physical-device touch behavior remain unverified.

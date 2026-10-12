@@ -168,7 +168,7 @@ export class Repository {
     return r;
   }
   async annotations(uid: string, passage?: string) {
-    return this.db.query(sql`select a.id,a.passage_id,a.paragraph_id,a.selected_text,a.note,a.kind,a.created_at,a.updated_at,
+    return this.db.query(sql`select a.id,a.passage_id,coalesce(a.paragraph_id,a.target_id) paragraph_id,a.selected_text,a.note,a.kind,a.created_at,a.updated_at,
       (select s.snapshot->>'title' from practice_sessions s where s.user_id=a.user_id and s.snapshot->'passage'->>'id'=a.passage_id order by s.started_at desc limit 1) title
       from annotations a where a.user_id=${uid}::uuid ${passage ? sql`and a.passage_id=${passage}` : sql``} order by a.created_at desc limit 1000`);
   }
@@ -188,12 +188,23 @@ export class Repository {
     if(!row)throw new ApiError(404,'ANNOTATION_NOT_FOUND');return row;
   }
   async annotate(uid: string, value: { passage_id: string; paragraph_id: string; selected_text: string; note: string; kind: string }) {
-    // Exact substring and ownership via a user's frozen session context.
-    const [r] = await this.db.query(sql`insert into annotations(user_id,passage_id,paragraph_id,selected_text,note,kind)
-      select ${uid}::uuid,${value.passage_id},${value.paragraph_id},${value.selected_text},${value.note},${value.kind}
-      where exists(select 1 from practice_sessions s,jsonb_array_elements(s.snapshot->'passage'->'paragraphs') p
-        where s.user_id=${uid}::uuid and s.snapshot->'passage'->>'id'=${value.passage_id} and p->>'id'=${value.paragraph_id} and position(${value.selected_text} in p->>'text')>0)
-      returning id,created_at`);
+    // Only exact text from this user's frozen session is eligible for annotation.
+    const [r] = await this.db.query(sql`insert into annotations(user_id,passage_id,paragraph_id,target_id,selected_text,note,kind)
+      select ${uid}::uuid,${value.passage_id},t.paragraph_id,t.target_id,${value.selected_text},${value.note},${value.kind}
+      from (
+        select p->>'id' paragraph_id,null::text target_id,p->>'text' body
+        from practice_sessions s,jsonb_array_elements(s.snapshot->'passage'->'paragraphs') p
+        where s.user_id=${uid}::uuid and s.snapshot->'passage'->>'id'=${value.passage_id}
+        union all
+        select null::text,'question:'||(q->>'id')||':stem',q->>'stem'
+        from practice_sessions s,jsonb_array_elements(s.snapshot->'questions') q
+        where s.user_id=${uid}::uuid and s.snapshot->'passage'->>'id'=${value.passage_id}
+        union all
+        select null::text,'question:'||(q->>'id')||':option:'||(o->>'key'),o->>'text'
+        from practice_sessions s,jsonb_array_elements(s.snapshot->'questions') q,jsonb_array_elements(q->'options') o
+        where s.user_id=${uid}::uuid and s.snapshot->'passage'->>'id'=${value.passage_id}
+      ) t where coalesce(t.paragraph_id,t.target_id)=${value.paragraph_id} and position(${value.selected_text} in t.body)>0
+      limit 1 returning id,created_at`);
     if (!r) throw new ApiError(400, 'ANNOTATION_CONTEXT_INVALID');
     return r;
   }

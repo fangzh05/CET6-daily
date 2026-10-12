@@ -48,7 +48,7 @@ export const reviewStates = pgTable('review_states', {
 }, t => [primaryKey({ columns: [t.userId, t.questionId] }), index('review_user_due').on(t.userId, t.reviewDueAt), check('review_step', sql`${t.step} between 0 and 3`)]);
 export const annotations = pgTable('annotations', {
   id: uuid().defaultRandom().primaryKey(), userId: uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }), passageId: text('passage_id').notNull().references(() => passages.id, { onDelete: 'restrict' }),
-  paragraphId: text('paragraph_id').notNull().references(() => passageParagraphs.id, { onDelete: 'restrict' }), selectedText: text('selected_text').notNull(), note: text().notNull(), kind: text().notNull(), createdAt: time('created_at').defaultNow().notNull(), updatedAt: time('updated_at').defaultNow().notNull()
-}, t => [index('annotation_user_passage').on(t.userId, t.passageId)]);
+  paragraphId: text('paragraph_id').references(() => passageParagraphs.id, { onDelete: 'restrict' }), targetId: text('target_id'), selectedText: text('selected_text').notNull(), note: text().notNull(), kind: text().notNull(), createdAt: time('created_at').defaultNow().notNull(), updatedAt: time('updated_at').defaultNow().notNull()
+}, t => [index('annotation_user_passage').on(t.userId, t.passageId), check('annotation_target', sql`(${t.paragraphId} is not null) <> (${t.targetId} is not null)`)]);
 
 

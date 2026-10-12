@@ -68,3 +68,11 @@
 .rp-mobile-context>span:last-child{flex-shrink:0}
 .rp-reader-scroll article[lang=ja] h1,.rp-reader-scroll article[lang=ja] .rp-paragraph p{font-family:'Yu Mincho','Hiragino Mincho ProN','Noto Serif CJK JP',serif;letter-spacing:normal;line-height:1.9}
 .rp-options[lang=ja],.rp-question-scroll h2[lang=ja]{line-height:1.8}
+
+/* Keep long N1 and KY1 navigators compact rather than shrinking or wrapping. */
+.rp-question-nav{flex-wrap:nowrap;min-width:0;max-width:100%;overscroll-behavior-x:contain}
+.rp-question-nav button{flex:0 0 44px;width:44px;min-height:44px;padding:4px}
+@media(max-width:599px){.rp-question-top{padding-block:6px}.rp-question-nav{gap:8px}.rp-question-nav button{flex:0 0 44px}}
+
+.annotation-surface{display:contents}
+[data-paragraph]{user-select:text;-webkit-user-select:text}

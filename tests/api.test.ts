@@ -109,6 +109,21 @@ describe('Worker API + real PostgreSQL execution (isolated PGlite test engine)',
     expect((await request(`/annotations/${id}`,'DELETE',undefined,'bob')).status).toBe(404);
     await json(`/annotations/${id}`,'DELETE');expect(await json('/annotations')).toEqual([]);
   });
+  it('saves exact question and option excerpts from owned frozen snapshots only',async()=>{
+    const body={passage_id:'careful-passage',paragraph_id:'question:careful-q1:stem',selected_text:'Synthetic test question',note:'题干笔记',kind:'note'};
+    const saved=await json<{id:string}>('/annotations','POST',body);
+    const option={...body,paragraph_id:'question:careful-q1:option:A',selected_text:'A reading experiment'};
+    const savedOption=await json<{id:string}>('/annotations','POST',option);
+    const rows=await json<{id:string;paragraph_id:string;selected_text:string}[]>('/annotations');
+    expect(rows.find(r=>r.id===saved.id)?.paragraph_id).toBe(body.paragraph_id);
+    expect(rows.find(r=>r.id===savedOption.id)?.selected_text).toBe(option.selected_text);
+    expect((await request('/annotations','POST',{...body,selected_text:'Invented quote'})).status).toBe(400);
+    expect((await request('/annotations','POST',{...body,paragraph_id:'question:missing:stem'})).status).toBe(400);
+    expect((await request('/annotations','POST',{...body,passage_id:'cloze-passage'})).status).toBe(400);
+    expect((await request('/annotations','POST',body,'no-session-user')).status).toBe(400);
+    expect((await request(`/annotations/${saved.id}`,'DELETE',undefined,'bob')).status).toBe(404);
+    await json(`/annotations/${saved.id}`,'DELETE');await json(`/annotations/${savedOption.id}`,'DELETE');
+  });
   it('rejects client user_id and cross-origin writes; prevents direct history mutation',async()=>{
     expect((await request('/sessions','POST',{group_id:'matching-group',practice_type:'new',user_id:crypto.randomUUID()})).status).toBe(400);
     expect((await app.request('http://localhost/api/settings',{method:'PATCH',headers:{Origin:'https://evil.invalid','Content-Type':'application/json'},body:'{"daily_goal":10}'},env)).status).toBe(403);
