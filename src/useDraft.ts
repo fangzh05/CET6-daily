@@ -20,7 +20,7 @@ export function useDraft(initial:Session,uid:string,enabled=true) {
   const [draft,setDraft]=useState<LocalDraft>(()=>valid && stored.current!.dirty ? stored.current!.draft : base);
   const [state,setState]=useState<SaveState>(()=>valid && stored.current!.dirty ? (stored.current!.revision===initial.revision?'saving':'conflict'):'saved');
   const current=useRef(draft); const revision=useRef(initial.revision); const dirty=useRef(Boolean(valid && stored.current!.dirty));
-  const generation=useRef(0); const saving=useRef<Promise<void>|null>(null); const blocked=useRef(state==='conflict'); const timer=useRef<ReturnType<typeof setTimeout>|null>(null);
+  const generation=useRef(0); const clockGeneration=useRef(0); const savingGeneration=useRef(0); const saving=useRef<Promise<void>|null>(null); const blocked=useRef(state==='conflict'); const timer=useRef<ReturnType<typeof setTimeout>|null>(null);
   const submitToken=useRef(stored.current?.token); const mounted=useRef(true); const clockPaused=useRef(false);
   const persist=useCallback(()=>{
     try { localStorage.setItem(key,JSON.stringify({revision:revision.current,draft:current.current,dirty:dirty.current,token:submitToken.current})); }
@@ -28,16 +28,23 @@ export function useDraft(initial:Session,uid:string,enabled=true) {
   },[key]);
   const flush=useCallback(async():Promise<void>=>{
     if(!active.current) return;
-    if(saving.current) { await saving.current; if(dirty.current) return flush(); return; }
+    if(saving.current) {
+      await saving.current;
+      // The one-second elapsed-time ticker should not cause an immediate chain
+      // of PATCH requests. Real answer/navigation edits still flush at once.
+      if(dirty.current && generation.current!==savingGeneration.current) return flush();
+      return;
+    }
     if(blocked.current) throw new RequestError(409,'REVISION_CONFLICT');
     if(!dirty.current) return;
-    const sent=structuredClone(current.current); const sentGeneration=generation.current; const expected=revision.current;
+    const sent=structuredClone(current.current); const sentGeneration=generation.current; const sentClockGeneration=clockGeneration.current; const expected=revision.current;
     setState('saving');
+    savingGeneration.current=sentGeneration;
     const work=(async()=>{
       try {
         const response=await api<Session>(`/sessions/${initial.id}`,'PATCH',{...sent,revision:expected});
         revision.current=response.revision;
-        dirty.current=generation.current!==sentGeneration; persist();
+        dirty.current=generation.current!==sentGeneration || clockGeneration.current!==sentClockGeneration; persist();
         if(mounted.current) setState(dirty.current?'saving':'saved');
       } catch(error) {
         if(error instanceof RequestError && error.code==='REVISION_CONFLICT') blocked.current=true;
@@ -48,7 +55,9 @@ export function useDraft(initial:Session,uid:string,enabled=true) {
     try { await work; } finally { saving.current=null; }
   },[initial.id,persist]);
   const update=useCallback((change:(d:LocalDraft)=>LocalDraft,schedule=true)=>{
-    current.current=change(current.current); generation.current++; dirty.current=true; setDraft(current.current); persist();
+    current.current=change(current.current);
+    if(schedule) generation.current++; else clockGeneration.current++;
+    dirty.current=true; setDraft(current.current); persist();
     if(schedule && !blocked.current) {
       setState('saving'); if(timer.current) clearTimeout(timer.current);
       timer.current=setTimeout(()=>{ void flush().catch(()=>{}); },650);

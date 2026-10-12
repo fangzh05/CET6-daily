@@ -19,6 +19,10 @@ export async function api<T>(path:string,method='GET',body?:unknown):Promise<T> 
   // Worker rejects non-JSON content types on mutations.
   const headers:Record<string,string>=method==='GET'||method==='HEAD'?{}:{'Content-Type':'application/json'};
   const response=await fetch(`/api${path}`,{method,credentials:'same-origin',cache:'no-store',headers,body:body===undefined?undefined:JSON.stringify(body),signal:AbortSignal.timeout(20000)});
-  if (!response.headers.get('content-type')?.includes('application/json')) throw new RequestError(401,'AUTH_REQUIRED');
+  if (!response.headers.get('content-type')?.includes('application/json')) {
+    const accessLogin = response.redirected && new URL(response.url).pathname.startsWith('/cdn-cgi/access/');
+    if (response.status === 401 || response.status === 403 || accessLogin) throw new RequestError(401,'AUTH_REQUIRED');
+    throw new RequestError(response.status || 503,'SERVICE_UNAVAILABLE');
+  }
   const value=await response.json() as {error?:string}; if(!response.ok) throw new RequestError(response.status,value.error ?? 'SERVICE_UNAVAILABLE'); return value as T;
 }
