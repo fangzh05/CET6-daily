@@ -52,3 +52,31 @@
 .app-shell .badge{display:inline-block;margin-left:8px;padding:2px 7px;border-radius:999px;background:var(--soft);color:var(--green);font-size:10px}
 .app-shell .redemption{display:block;font-size:12px}
 .app-shell .redemption small{display:block;color:var(--muted);font-size:10px}
+
+/* Keep the document canvas and the app in the same theme, including iOS bounce. */
+:root{--page-bg:#fafaf9;--page-ink:#202124;--surface:#fff;--muted:#777b82;--line:#e5e5e3;--soft:#eff5ff;--green:#2563eb;background:var(--page-bg);color:var(--page-ink);color-scheme:light}
+:root[data-theme=dark]{--page-bg:#191b1e;--page-ink:#e5e7eb;--surface:#202226;--muted:#a0a6af;--line:#363a40;--soft:#293852;--green:#96baff;color-scheme:dark}
+html,body{height:100%;background:var(--page-bg);color:var(--page-ink);overflow:hidden}
+#root{height:100dvh;background:var(--page-bg);padding:env(safe-area-inset-top) env(safe-area-inset-right) 0 env(safe-area-inset-left);overflow:hidden}
+.app-shell{height:100%;min-height:0;overflow:auto;overscroll-behavior-y:contain;padding-bottom:env(safe-area-inset-bottom)}
+.app-shell .topbar{position:sticky;top:0;z-index:10;isolation:isolate;flex-shrink:0}
+.app-shell .section-title{flex-wrap:wrap;gap:12px}
+.exam-choice{display:flex;align-items:center;gap:8px;font-size:11px;color:var(--muted)}
+.exam-choice select{max-width:100%;border:1px solid var(--line);border-radius:6px;padding:6px 10px;font-size:12px}
+.kind-stat{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:16px}
+.kind-stat span{min-width:0;overflow-wrap:anywhere}.kind-stat strong{text-align:right;font-variant-numeric:tabular-nums}
+.app-shell input,.app-shell textarea,.app-shell .confirm-dialog,.app-shell .note-popover{background:var(--surface);color:var(--home-ink);border-color:var(--line)}
+.app-shell .goal select{border-color:var(--line)}
+@media(max-width:599px){.exam-choice{order:3;flex-basis:100%}.home-theme{max-width:115px}.app-shell .topbar{padding-top:8px}}
+/* Legacy reader shares the document theme instead of hard-coded white surfaces. */
+.reader-shell{height:100%;background:var(--page-bg);color:var(--page-ink);--rp-bg:var(--page-bg);--rp-paper:var(--surface);--rp-ink:var(--page-ink)}
+.reader-shell .reader-header,.reader-shell .questions-side,.reader-shell .question-nav,.reader-shell .submit-bar,.reader-shell .mobile-switch,.reader-shell .option,.reader-shell .word-bank button,.reader-shell .matching-options button,.reader-shell .confirm-dialog,.reader-shell .note-popover,.reader-shell textarea{background:var(--surface);color:var(--page-ink);border-color:var(--line)}
+.reader-shell .passage-side,.reader-shell .passage-scroll{background:var(--page-bg);color:var(--page-ink)}
+:root[data-theme=dark] .reader-shell{--green:#96baff;--muted:#a0a6af;--line:#363a40;--soft:#293852}
+:root[data-theme=dark] .reader-shell .option.selected,:root[data-theme=dark] .reader-shell .result-answers,:root[data-theme=dark] .reader-shell .evidence,:root[data-theme=dark] .reader-shell .save-warning,:root[data-theme=dark] .reader-shell .pause-notice{background:var(--soft);color:var(--page-ink)}
+
+.confirm-dialog,.rp-dialog,.rp-note-dialog{max-height:calc(100dvh - env(safe-area-inset-top) - env(safe-area-inset-bottom) - 40px);overflow-y:auto}
+
+.account-logout{flex:none;min-height:44px;min-width:60px;padding:8px 14px;border:1px solid var(--line);border-radius:6px;background:var(--surface);color:var(--home-ink);font-size:12px;white-space:nowrap}
+.account-logout:hover{background:var(--soft)}.account-logout-dialog{margin:auto;color:var(--home-ink)}.account-logout-dialog::backdrop{background:#11182766}
+.app-shell .account-menu{margin-right:12px}

@@ -108,7 +108,7 @@ export function createApp(deps: Dependencies = {}) {
   app.post('/api/reviews/:id/grade', async c => { const b = submitSchema.parse(await c.req.json()); const sid = z.uuid().parse(c.req.param('id')); const s = await c.get('repo').session(uid(c),sid); if (s.practice_type !== 'review') throw new ApiError(400,'REVIEW_SESSION_REQUIRED'); return c.json(await c.get('repo').submit(uid(c),sid,b.submission_id,b.revision)); });
   app.get('/api/stats', async c => c.json(await c.get('repo').stats(uid(c))));
   app.get('/api/mistakes', async c => {const query=mistakeQuerySchema.parse(c.req.query());return c.json(await c.get('repo').mistakes(uid(c),query.day,query.offset));});
-  app.patch('/api/settings', async c => { const b = z.object({ daily_goal: z.number().int().min(1).max(50) }).strict().parse(await c.req.json()); await c.get('repo').setGoal(uid(c),b.daily_goal); return c.json(b); });
+  app.patch('/api/settings', async c => { const b = z.object({ daily_goal: z.number().int().min(1).max(50).optional(), selected_exam: z.enum(['CET6','KY1','JLPT_N1']).optional() }).strict().parse(await c.req.json()); if(b.selected_exam!==undefined)await c.get('repo').setExam(uid(c),b.selected_exam); if(b.daily_goal!==undefined)await c.get('repo').setGoal(uid(c),b.daily_goal); return c.json(b); });
   app.get('/api/annotations', async c => c.json(await c.get('repo').annotations(uid(c),c.req.query('passage_id'))));
   app.post('/api/annotations', async c => c.json(await c.get('repo').annotate(uid(c),annotationSchema.parse(await c.req.json())),201));
   app.delete('/api/annotations/:id',async c=>c.json(await c.get('repo').removeAnnotation(uid(c),z.uuid().parse(c.req.param('id')))));

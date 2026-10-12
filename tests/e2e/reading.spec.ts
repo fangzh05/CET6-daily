@@ -1,5 +1,5 @@
 import {test,expect} from '@playwright/test';
-test.beforeEach(async({request})=>{await request.get('http://127.0.0.1:8787/__test/reset');});
+test.beforeEach(async({request})=>{await request.get(`http://127.0.0.1:${process.env.TEST_API_PORT??8787}/__test/reset`);});
 test('pending library opens full context on desktop and mobile without grading',async({page})=>{
   await page.goto('/');await page.getByRole('button',{name:'题库',exact:true}).click();
   const row=page.locator('article').filter({has:page.getByRole('heading',{name:'待核验测试文章 · 非六级真题'})});

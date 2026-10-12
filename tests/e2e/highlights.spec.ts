@@ -1,7 +1,7 @@
 import {test,expect} from '@playwright/test';
 
 test('current highlights remain visible, survive refresh, and deduplicate',async({page,request})=>{
-  await request.get('http://127.0.0.1:8787/__test/reset');
+  await request.get(`http://127.0.0.1:${process.env.TEST_API_PORT??8787}/__test/reset`);
   await page.goto('/');
   await page.getByRole('button',{name:'开始阅读'}).click();
   const paragraph=page.locator('.rp-paragraph p').first();

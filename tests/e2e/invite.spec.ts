@@ -1,5 +1,5 @@
 import {test,expect} from '@playwright/test';
-test.beforeEach(async({request})=>{await request.get('http://127.0.0.1:8787/__test/reset');});
+test.beforeEach(async({request})=>{await request.get(`http://127.0.0.1:${process.env.TEST_API_PORT??8787}/__test/reset`);});
 // The invite-only path is a desktop acceptance flow: a stranger sees the
 // activation screen, an administrator issues a code in the console, and the
 // same stranger redeems it and lands on the normal home screen.

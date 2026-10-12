@@ -25,7 +25,7 @@ export const inviteRedemptions = pgTable('invite_redemptions', {
   userId: uuid('user_id').notNull().references(() => users.id, { onDelete: 'restrict' }),
   redeemedAt: time('redeemed_at').defaultNow().notNull()
 }, t => [primaryKey({ columns: [t.inviteId, t.userId] })]);
-export const userSettings = pgTable('user_settings', { userId: uuid('user_id').primaryKey().references(() => users.id, { onDelete: 'cascade' }), dailyGoal: integer('daily_goal').notNull().default(5) }, t => [check('daily_goal_bounds', sql`${t.dailyGoal} between 1 and 50`)]);
+export const userSettings = pgTable('user_settings', { userId: uuid('user_id').primaryKey().references(() => users.id, { onDelete: 'cascade' }), selectedExam: text('selected_exam').notNull().default('CET6'), dailyGoal: integer('daily_goal').notNull().default(5) }, t => [check('daily_goal_bounds', sql`${t.dailyGoal} between 1 and 50`)]);
 export const practiceSessions = pgTable('practice_sessions', {
   id: uuid().defaultRandom().primaryKey(), userId: uuid('user_id').notNull().references(() => users.id, { onDelete: 'restrict' }),
   groupId: text('group_id').notNull().references(() => questionGroups.id, { onDelete: 'restrict' }), practiceType: text('practice_type').notNull(),

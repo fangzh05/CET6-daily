@@ -57,6 +57,13 @@
       "when": 1791808200000,
       "tag": "0007_question_annotations",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1791849600000,
+      "tag": "0008_daily_exam",
+      "breakpoints": true
     }
   ]
 }

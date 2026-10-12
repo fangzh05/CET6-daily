@@ -1,0 +1,23 @@
+import {beforeAll,afterAll,it,expect} from 'vitest';
+import {sql} from 'drizzle-orm';
+import {testDatabase,importFixture} from './database';
+import {fixture} from './fixture';
+import {Repository} from '../worker/repository';
+let data:Awaited<ReturnType<typeof testDatabase>>,repo:Repository,uid:string;
+beforeAll(async()=>{data=await testDatabase();repo=new Repository(data.db);uid=(await repo.provisionTestUser({identity:'exam-test',email:'exam@example.invalid'})).id;
+ await importFixture(data.db,fixture('careful','cet6'));
+ const n1=fixture('careful','n1');n1.paper.exam='JLPT_N1';n1.kind='jlpt_reading';await importFixture(data.db,n1);
+ const pending=fixture('careful','ky-pending');pending.paper.exam='KY1';pending.paper.month=0;pending.release_status='pending';await importFixture(data.db,pending);
+});
+afterAll(async()=>{await data.pg.close();});
+it('defaults to CET6 and lists only released available exams',async()=>{const d=await repo.dashboard(uid);expect(d.selected_exam).toBe('CET6');expect(d.available_exams).toEqual(['CET6','JLPT_N1']);expect(d.recommendations.every(g=>g.exam==='CET6')).toBe(true);await expect(repo.setExam(uid,'KY1')).rejects.toThrow();});
+it('persists selection independently of goal and preserves original sessions, grading and reviews',async()=>{
+ const c=await repo.start(uid,'cet6-group','new');await repo.setExam(uid,'JLPT_N1');await repo.setGoal(uid,10);
+ const d=await repo.dashboard(uid);expect(d.daily_goal).toBe(10);expect(d.recommendations.every(g=>g.exam==='JLPT_N1')).toBe(true);expect(d.active.some(s=>s.id===c.id)).toBe(true);
+ const n=await repo.start(uid,'n1-group','new');await repo.save(uid,n.id,{revision:n.revision,choices:{},cursor:0,scroll:0,elapsed_ms:1000,paused:false});const saved=await repo.session(uid,n.id);await repo.submit(uid,n.id,crypto.randomUUID(),saved.revision);
+ expect((await repo.result(uid,n.id)).score).toBe(0);expect((await repo.dashboard(uid)).remaining).toBe(5);
+ await data.db.query(sql`update review_states set review_due_at=now()-interval '1 minute' where user_id=${uid}::uuid`);
+ expect((await repo.due(uid)).length).toBe(5);
+ await repo.setExam(uid,'CET6');expect((await repo.dashboard(uid)).remaining).toBe(10);expect(await repo.due(uid)).toHaveLength(0);expect((await repo.session(uid,c.id)).snapshot.paper.exam).toBe('CET6');
+ await repo.setExam(uid,'JLPT_N1');expect(await repo.daily(uid)).toHaveLength(0);expect((await repo.stats(uid)).first_count).toBe(5);
+});

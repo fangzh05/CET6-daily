@@ -76,3 +76,7 @@
 
 .annotation-surface{display:contents}
 [data-paragraph]{user-select:text;-webkit-user-select:text}
+
+#root>.reading-prototype,#root>.reader-shell{height:100%;min-height:0}
+.rp-header-actions select{font:inherit;min-height:44px;max-width:116px;background:var(--rp-paper);color:var(--rp-ink);border:1px solid var(--rp-line);border-radius:6px;padding:6px}
+.rp-notes-panel{top:calc(68px + env(safe-area-inset-top));max-height:calc(100dvh - 90px - env(safe-area-inset-top))}

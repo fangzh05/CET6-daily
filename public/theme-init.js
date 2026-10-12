@@ -1,0 +1,1 @@
+var m;try{m=localStorage.getItem('cet6:theme');}catch{}try{var d=m==='dark'||(m!=='light'&&matchMedia('(prefers-color-scheme: dark)').matches);document.documentElement.dataset.theme=d?'dark':'light';document.documentElement.style.colorScheme=d?'dark':'light';document.querySelector('meta[name="theme-color"]').content=d?'#191b1e':'#fafaf9';}catch{}

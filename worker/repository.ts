@@ -32,11 +32,12 @@ export class Repository {
     const [row] = await this.db.query(sql`select cet6_redeem_invite(${identity.identity},${identity.email},${code}) data`);
     return row.data as { status: 'redeemed' | 'existing'; user: { id: string; email: string; account_status: string } };
   }
-  async daily(uid: string, limit = 1) {
+  async daily(uid: string, limit = 1, exam?: string) {
+    exam ??= await this.selectedExam(uid);
     return this.db.query<GroupSummary & Record<string, unknown>>(sql`
       select g.id,g.title,g.kind,p.exam,p.year,p.month,p.set,(select count(*)::int from questions q where q.group_id=g.id and not q.archived) question_count
       from question_groups g join papers p on p.id=g.paper_id
-      where g.eligible and not g.archived and g.kind='careful'
+      where g.eligible and not g.archived and p.exam=${exam} and (g.kind='careful' or (p.exam='JLPT_N1' and g.kind='jlpt_reading'))
         and not exists(select 1 from questions q join attempts a on a.question_id=q.id where q.group_id=g.id and a.user_id=${uid}::uuid and a.practice_type='new')
       order by p.year desc,p.month desc,p.set,g.id limit ${limit}`);
   }
@@ -110,10 +111,23 @@ export class Repository {
       where s.status='submitted' and a.session_id=${sid}::uuid and a.user_id=${uid}::uuid order by a.question_id`);
     return { session: s, score: Number(score.score), total: Number(score.total), attempts: rows as unknown as Result['attempts'] };
   }
-  async due(uid: string) {
+  async due(uid: string, exam?: string) {
+    exam ??= await this.selectedExam(uid);
     return this.db.query<{ question_id: string; group_id: string; title: string; review_due_at: string }>(sql`
       select r.question_id,q.group_id,g.title,r.review_due_at from review_states r join questions q on q.id=r.question_id join question_groups g on g.id=q.group_id
-      where r.user_id=${uid}::uuid and r.review_due_at<=now() and g.eligible and not g.archived and not q.archived order by r.review_due_at,r.question_id`);
+      where exists(select 1 from papers p where p.id=g.paper_id and p.exam=${exam}) and r.user_id=${uid}::uuid and r.review_due_at<=now() and g.eligible and not g.archived and not q.archived order by r.review_due_at,r.question_id`);
+  }
+  async selectedExam(uid: string): Promise<string> {
+    const [r]=await this.db.query(sql`select selected_exam from user_settings where user_id=${uid}::uuid`);
+    return String(r?.selected_exam ?? 'CET6');
+  }
+  async availableExams(): Promise<string[]> {
+    const rows=await this.db.query(sql`select distinct p.exam from papers p join question_groups g on g.paper_id=p.id where g.eligible and not g.archived and (g.kind='careful' or (p.exam='JLPT_N1' and g.kind='jlpt_reading')) order by p.exam`);
+    return rows.map(r=>String(r.exam));
+  }
+  async setExam(uid: string, exam: string) {
+    if(!(await this.availableExams()).includes(exam))throw new ApiError(400,'EXAM_NOT_AVAILABLE');
+    await this.db.query(sql`insert into user_settings(user_id,selected_exam) values(${uid}::uuid,${exam}) on conflict(user_id) do update set selected_exam=excluded.selected_exam`);
   }
   async settings(uid: string) {
     const [r] = await this.db.query(sql`select daily_goal from user_settings where user_id=${uid}::uuid`);
@@ -151,12 +165,13 @@ export class Repository {
     return { ...summary, trend, by_kind, by_year: yearly, errors, review_completion: reviewCompletion } as unknown as Stats;
   }
   async dashboard(uid: string) {
-    const [daily_goal, stats, due, active] = await Promise.all([this.settings(uid), this.stats(uid), this.due(uid), this.active(uid)]);
+    const selected_exam=await this.selectedExam(uid);
+    const [daily_goal, stats, due, active, available_exams] = await Promise.all([this.settings(uid), this.stats(uid), this.due(uid,selected_exam), this.active(uid), this.availableExams()]);
     // Goal counts first attempts only; repeats do not remove today's new reading task.
-    const [today] = await this.db.query(sql`select count(*)::int n from attempts where user_id=${uid}::uuid and practice_type='new' and submitted_at >= (date_trunc('day',now() at time zone 'Asia/Shanghai') at time zone 'Asia/Shanghai')`);
+    const [today] = await this.db.query(sql`select count(*)::int n from attempts a join practice_sessions s on s.id=a.session_id where a.user_id=${uid}::uuid and coalesce(s.snapshot->'paper'->>'exam','CET6')=${selected_exam} and a.practice_type='new' and a.submitted_at >= (date_trunc('day',now() at time zone 'Asia/Shanghai') at time zone 'Asia/Shanghai')`);
     const remaining = Math.max(0, daily_goal-Number(today.n));
-    const recommendations = remaining > 0 ? await this.daily(uid, Math.ceil(remaining/5)) : [];
-    return { daily_goal, remaining, recommendations, due, active, stats };
+    const recommendations = remaining > 0 ? await this.daily(uid, Math.ceil(remaining/5), selected_exam) : [];
+    return { selected_exam, available_exams, daily_goal, remaining, recommendations, due, active, stats };
   }
   async review(uid: string, qid: string, category?: string) {
     const [r] = await this.db.query(sql`
