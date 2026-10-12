@@ -1,14 +1,15 @@
 import { useEffect, useRef, useState } from 'react';
+import { kindNames, paperLabel } from '../../shared/contracts';
 import type { Result, Session } from '../../shared/contracts';
 import { api, friendly } from '../api';
 import { useReadingNotes } from '../useReadingNotes';
 import { useDraft } from '../useDraft';
 import { ReadingWorkspace, type ReadingConnection } from './ReadingPlayground';
 
-// Default careful-reading entry; matching/cloze keep their existing workspace.
+// Shared CET6, KY1 careful-reading and JLPT single-choice workspace.
 export default function FormalReading({sessionId}:{sessionId:string}){
   const [loaded,setLoaded]=useState<{session:Session;uid:string;result:Result|null}|null>(null);const [error,setError]=useState('');
-  useEffect(()=>{let active=true;void(async()=>{try{const user=await api<{id:string}>('/me');const session=await api<Session>(`/sessions/${encodeURIComponent(sessionId)}`);if(session.snapshot.kind!=='careful')throw new Error('此入口仅支持仔细阅读，请使用现有正式练习页面。');const result=session.status==='submitted'?await api<Result>(`/sessions/${session.id}/result`):null;if(active)setLoaded({session,uid:user.id,result});}catch(e){if(active)setError(friendly(e));}})();return()=>{active=false;};},[sessionId]);
+  useEffect(()=>{let active=true;void(async()=>{try{const user=await api<{id:string}>('/me');const session=await api<Session>(`/sessions/${encodeURIComponent(sessionId)}`);if(!['careful','jlpt_reading','jlpt_vocab','jlpt_grammar'].includes(session.snapshot.kind))throw new Error('此题型请从首页进入正式练习。');const result=session.status==='submitted'?await api<Result>(`/sessions/${session.id}/result`):null;if(active)setLoaded({session,uid:user.id,result});}catch(e){if(active)setError(friendly(e));}})();return()=>{active=false;};},[sessionId]);
   if(error)return <main className="dashboard"><p role="alert">{error}</p><a href="/">返回正式练习</a></main>;
   if(!loaded)return <p role="status">正在读取正式练习会话…</p>;
   return <FormalReadingSession key={loaded.session.id} {...loaded}/>;
@@ -25,7 +26,7 @@ export function FormalReadingSession({session,uid,result:initialResult,onLeave,o
   const label={saved:'云端已保存',saving:'正在保存草稿',failed:'云端保存失败 · 本机保留',conflict:'草稿冲突 · 请先处理'}[draft.state];
   const connection:ReadingConnection={canViewNotes:!!result,notes:result?notes.notes:[],noteError:notes.error,onNotesRetry:()=>notes.load().then(()=>{}),highlights:result?notes.highlights:undefined,
     onHighlights:async highlights=>{if(!result){const removed=(practiceHighlights.current??[]).filter(h=>!highlights.some(p=>p.paragraphId===h.paragraphId&&p.start===h.start&&p.end===h.end));await notes.save(highlights);await notes.remove(notes.highlights.filter(h=>removed.some(p=>p.paragraphId===h.paragraphId&&p.start===h.start&&p.end===h.end)).map(h=>h.id));practiceHighlights.current=highlights;return;}const previous=notes.highlights;await notes.save(highlights.filter(h=>!previous.some(p=>p.id===h.id)));await notes.remove(previous.filter(h=>!highlights.some(p=>p.id===h.id)).map(h=>h.id));},onSaveNote:async(ranges,note)=>{await notes.save(ranges,note);if(!result)practiceHighlights.current=[...(practiceHighlights.current??[]),...ranges.map(r=>({...r,id:crypto.randomUUID()}))];},practiceLabel:session.practice_type==='retry'?'重新练习':'正式练习',
-    data:{id:group.passage.id,title:group.title,subtitle:'Careful reading',paragraphs:group.passage.paragraphs,questions},storageKey:`cet6:reading-ui:${uid}:${session.id}`,
+    data:{id:group.passage.id,title:group.title,subtitle:paperLabel(group.paper)+' · '+kindNames[group.kind],questionOnly:['jlpt_vocab','jlpt_grammar'].includes(group.kind),language:group.paper.exam==='JLPT_N1'?'ja':'en',paragraphs:group.passage.paragraphs,questions},storageKey:`cet6:reading-ui:${uid}:${session.id}`,
     answers:Object.fromEntries(Object.entries(result?result.session.choices:draft.draft.choices).filter(([,c])=>c.answer).map(([id,c])=>[id,c.answer!])),flags:Object.entries(result?result.session.choices:draft.draft.choices).filter(([,c])=>c.uncertain).map(([id])=>id),cursor:result?reviewCursor:draft.draft.cursor,scroll:draft.draft.scroll,reviews,saveLabel:result?'正式成绩已保存':(session.practice_type==='retry'?'重新练习 · ':'')+label,blocked:busy||!!result||draft.state==='conflict'||draft.draft.paused,
     onAnswer:(id,key)=>{if(!result&&!busy)draft.answer(id,key);},onFlag:id=>{if(!result&&!busy)draft.uncertain(id);},onMove:cursor=>{if(result)setReviewCursor(cursor);else draft.update(s=>({...s,cursor}));},onScroll:scroll=>{if(!result)draft.update(s=>({...s,scroll}));},
     submit:async()=>{setBusy(true);setError('');try{await draft.submit();setResult(await api<Result>(`/sessions/${session.id}/result`));}catch(e){throw new Error(friendly(e));}finally{setBusy(false);}},

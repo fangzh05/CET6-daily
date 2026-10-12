@@ -12,10 +12,25 @@
 .preview-switch{display:none}.preview-switch button[aria-pressed=true]{font-weight:700;background:#e5ece8}
 @media(max-width:767px){.preview-layout{display:block}.preview-switch{display:flex;gap:12px;margin-top:20px}.preview-layout [data-mobile-visible=false]{display:none}.preview-article,.preview-questions{max-height:70vh}.topbar nav{gap:4px}.topbar nav button{padding:8px}}
 
-.reader-columns.kind-jlpt_vocab,.reader-columns.kind-jlpt_grammar{grid-template-columns:minmax(0,1fr)}
-.reader-columns.kind-jlpt_vocab .passage-side,.reader-columns.kind-jlpt_grammar .passage-side{display:none}
-.mobile-switch.question-only{justify-content:center}
-.mobile-switch.question-only button{max-width:240px}
 .preview-layout.preview-no-passage{display:block}
 .preview-no-passage .preview-article{display:none}
 .reading-optin{font-size:12px;color:var(--green);white-space:nowrap}@media(max-width:767px){.reading-optin{display:none}}
+
+.reader-columns>section{min-width:0;min-height:0}
+.question-nav>div{overflow-x:auto;flex-wrap:wrap;max-height:110px}
+@media(max-width:700px){
+ .reader-columns{flex-direction:column;min-height:0}
+ .reader-columns .passage-side,.reader-columns .questions-side{position:relative;inset:auto;visibility:visible;pointer-events:auto;z-index:auto;width:100%;min-height:0}
+ .reader-columns .passage-side{height:42%;flex:none;border-bottom:1px solid var(--line)}
+ .reader-columns .questions-side{height:58%;flex:none}
+ .passage-toolbar{min-height:44px;font-size:11px;flex-wrap:wrap;gap:4px}
+ .passage-toolbar>div{gap:4px}.passage-toolbar select{max-width:105px}
+ .passage-scroll{padding:18px 24px 28px 38px}.article-title h1{font-size:23px}
+ .question-nav{padding:8px 18px}.question-scroll{padding:18px}
+ .submit-bar{padding:8px 18px max(8px,env(safe-area-inset-bottom))}
+}
+.reader-shell{background:#fafaf9;color:#202124}
+.reader-shell .passage-side{background:#fafaf9}.reader-shell .questions-side{background:#fff}
+.reader-shell .option,.reader-shell .matching-options button,.reader-shell .word-bank button{border-radius:8px}
+.reader-shell .option.selected,.reader-shell .matching-options button.selected,.reader-shell .word-bank button.selected{background:#eff5ff;border-color:#2563eb;color:#202124}
+.reader-shell .question-nav button[aria-current=step]{border-color:#2563eb;color:#2563eb}
