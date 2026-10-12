@@ -52,7 +52,7 @@ BEGIN
     VALUES(gid,g->'source'->>'repository',g->'source'->>'path',g->'source'->>'commit',g->'source'->>'hash',(g->'source') - ARRAY['repository','path','commit','hash'],batch)
     ON CONFLICT(group_id) DO UPDATE SET repository=excluded.repository,path=excluded.path,commit=excluded.commit,hash=excluded.hash,metadata=excluded.metadata,batch_id=excluded.batch_id;
   UPDATE question_groups SET eligible=(g->>'release_status'='released' AND content_status='complete' AND question_status='complete' AND kind NOT IN ('translation','writing')
-    AND (SELECT count(*) FROM questions WHERE group_id=gid AND NOT archived)=CASE WHEN coalesce(p->>'exam','CET6')='CET6' THEN CASE WHEN kind='careful' THEN 5 ELSE 10 END ELSE CASE WHEN kind='use_of_english' THEN 20 WHEN kind IN ('careful','matching') THEN 5 ELSE 0 END END
+    AND (SELECT count(*) FROM questions WHERE group_id=gid AND NOT archived)=CASE WHEN coalesce(p->>'exam','CET6')='CET6' THEN CASE WHEN kind='careful' THEN 5 ELSE 10 END WHEN coalesce(p->>'exam','CET6')='JLPT_N1' THEN jsonb_array_length(g->'questions') ELSE CASE WHEN kind='use_of_english' THEN 20 WHEN kind IN ('careful','matching') THEN 5 ELSE 0 END END
     AND NOT EXISTS(SELECT 1 FROM questions q LEFT JOIN answer_keys a ON a.question_id=q.id WHERE q.group_id=gid AND NOT q.archived AND (a.verification_status IS DISTINCT FROM 'verified' OR a.verified_at IS NULL)))
     WHERE id=gid;
 END $$;

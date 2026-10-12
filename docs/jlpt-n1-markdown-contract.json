@@ -1,0 +1,9 @@
+{
+  "adapter": "workbuddy-jlpt-n1-markdown-v1",
+  "source_commit": "215b7ffd509824388541ab826b82053c7b185cd3",
+  "readme_sha256": "fdc1f08993dcac83c8d0719a227b8cceb17fa6331e6f687bda614afba79f62f6",
+  "markdown_tree_sha256": "29c26204729d46ff105106daca922458629d80b593239c06d570dbf49a7fc2a5",
+  "paper_count": 29,
+  "group_count": 375,
+  "question_count": 2000
+}

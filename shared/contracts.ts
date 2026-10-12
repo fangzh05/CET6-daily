@@ -1,6 +1,13 @@
 import { z } from 'zod';
-export const examSchema = z.enum(['CET6', 'KY1']);
-export const kindSchema = z.enum(['careful', 'matching', 'cloze', 'use_of_english', 'translation', 'writing']);
+export const examSchema = z.enum(['CET6', 'KY1', 'JLPT_N1']);
+export const kindSchema = z.enum(['careful', 'matching', 'cloze', 'use_of_english', 'translation', 'writing', 'jlpt_vocab', 'jlpt_grammar', 'jlpt_reading']);
+export const examNames: Record<z.infer<typeof examSchema>, string> = { CET6: '英语六级', KY1: '考研英语一', JLPT_N1: 'JLPT N1' };
+export const kindNames: Record<z.infer<typeof kindSchema>, string> = { careful: '仔细阅读', matching: '匹配 / 新题型', cloze: '选词填空', use_of_english: '完形填空', translation: '翻译', writing: '写作', jlpt_vocab: '文字・语彙', jlpt_grammar: '文法', jlpt_reading: '読解' };
+export function paperLabel(paper: { exam: z.infer<typeof examSchema>; year: number; month: number; set: number }): string {
+  if (paper.exam === 'KY1') return `${paper.year} 年考研英语一`;
+  if (paper.exam === 'JLPT_N1') return `${paper.year} 年 ${paper.month} 月 JLPT N1`;
+  return `${paper.year} 年 ${paper.month} 月 · 第 ${paper.set} 套`;
+}
 export const practiceTypeSchema = z.enum(['new', 'retry', 'review']);
 export const errorCategorySchema = z.enum(['vocabulary', 'sentence', 'locating', 'inference', 'distractor', 'time']);
 export const verificationSchema = z.enum(['pending', 'verified', 'rejected']);
@@ -29,6 +36,7 @@ export const groupSchema = z.object({
   const unique = (items: string[], name: string) => { if (new Set(items).size !== items.length) fail(`duplicate ${name}`); };
   if(g.paper.exam==='CET6'&&(![6,7,9,12].includes(g.paper.month)||!['careful','matching','cloze'].includes(g.kind)))fail('Invalid CET6 paper or group type');
   if(g.paper.exam==='KY1'&&(g.paper.month!==0||g.kind==='cloze'))fail('Invalid KY1 paper or group type');
+  if(g.paper.exam==='JLPT_N1'&&(![7,12].includes(g.paper.month)||g.paper.set!==1||!['jlpt_vocab','jlpt_grammar','jlpt_reading'].includes(g.kind)))fail('Invalid JLPT N1 paper or group type');
   unique(g.questions.map(q => q.id), 'question IDs'); unique(g.questions.map(q => String(q.number)), 'question numbers');
   unique(g.passage.paragraphs.map(p => p.id), 'paragraph IDs'); unique(g.passage.paragraphs.map(p => p.label), 'paragraph labels');
   unique(g.passage.paragraphs.map(p => String(p.position)), 'paragraph positions'); unique(g.answers.map(a => a.question_id), 'answer IDs');
@@ -37,13 +45,15 @@ export const groupSchema = z.object({
     if(!['translation','writing'].includes(g.kind)&&!q.options.length)fail(`${q.id}: objective question requires options`);
     unique(q.options.map(o => o.key), `option keys for ${q.id}`);
     if (['careful','use_of_english'].includes(g.kind) && q.options.map(o => o.key).sort().join('') !== 'ABCD') fail(`${q.id}: multiple choice requires A/B/C/D`);
+    if (g.kind.startsWith('jlpt_') && q.options.map(o => o.key).sort().join('') !== 'ABCD') fail(`${q.id}: JLPT N1 multiple choice requires A/B/C/D`);
     if (q.paragraph_ids.some(p => !g.passage.paragraphs.some(row => row.id === p))) fail(`${q.id}: unknown paragraph`);
     if (g.kind === 'matching' && q.options.some(o => !g.passage.paragraphs.some(p => p.label === o.key) && !g.passage.word_bank.some(w => w.key === o.key))) fail(`${q.id}: unknown matching label`);
     if (g.kind === 'cloze' && q.options.some(o => !g.passage.word_bank.some(w => w.key === o.key && w.text === o.text))) fail(`${q.id}: option is not in word bank`);
   }
   if (g.content_status === 'complete' && g.question_status === 'complete') {
-    const expected=g.paper.exam==='CET6'?(g.kind==='careful'?5:10):g.kind==='use_of_english'?20:['careful','matching','translation'].includes(g.kind)?5:g.kind==='writing'?1:0;
-    if (g.questions.length !== expected) fail(`complete ${g.paper.exam} ${g.kind} groups require ${expected} questions`);
+    const expected=g.paper.exam==='CET6'?(g.kind==='careful'?5:10):g.paper.exam==='JLPT_N1'?0:g.kind==='use_of_english'?20:['careful','matching','translation'].includes(g.kind)?5:g.kind==='writing'?1:0;
+    if (expected && g.questions.length !== expected) fail(`complete ${g.paper.exam} ${g.kind} groups require ${expected} questions`);
+    if (g.paper.exam==='JLPT_N1'&&!g.questions.length) fail('complete JLPT N1 groups require at least one question');
     if (g.kind === 'cloze') for (const q of g.questions) {
       const count = g.passage.paragraphs.reduce((sum, p) => sum + p.text.split(`{{${q.number}}}`).length - 1, 0);
       if (count !== 1) fail(`${q.id}: cloze must have exactly one {{${q.number}}} blank`);
